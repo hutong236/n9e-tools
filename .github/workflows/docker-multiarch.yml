@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Image tag (e.g. v0.4.0; no spaces or slash)'
+        description: 'Image tag (e.g. v0.5.0; no spaces or slash)'
         required: true
-        default: 'v0.4.0'
+        default: 'v0.5.0'
         type: string
       push_latest:
         description: 'Also publish latest tag'
