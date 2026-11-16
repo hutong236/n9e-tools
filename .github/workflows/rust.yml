@@ -13,3 +13,9 @@ jobs:
         run: cargo test --all-targets
       - name: Compile release
         run: cargo build --release
+      - name: Upload Linux AMD64 binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: n9e-tools-linux-amd64
+          path: target/release/n9e-tools
+          if-no-files-found: error
