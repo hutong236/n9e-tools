@@ -75,13 +75,13 @@ cargo build --release
 
 进入仓库的 [Actions → Build multi-platform Docker image](https://github.com/hutong236/n9e-tools/actions/workflows/docker-multiarch.yml)，点击 **Run workflow**，选择 `main` 分支并设置：
 
-- `tag`：镜像版本标签，例如 `v0.3.0`（必填，默认 `v0.3.0`）。
+- `tag`：镜像版本标签，例如 `v0.4.0`（必填，默认 `v0.4.0`）。
 - `push_latest`：是否同时覆盖推送 `latest`（默认关闭，发布正式稳定版时才建议勾选）。
 
 工作流使用 Docker Buildx + QEMU，在 GitHub 托管的 Ubuntu Runner 上构建 **linux/amd64** 和 **linux/arm64**，并将统一的多架构 manifest 推送到 GitHub Container Registry：
 
 ```text
-ghcr.io/hutong236/n9e-tools:v0.3.0
+ghcr.io/hutong236/n9e-tools:v0.4.0
 ```
 
 无需额外提供 GHCR 密码。工作流通过 `secrets.GITHUB_TOKEN` 登录，具备 `packages: write` 最小权限。首次发布的 GHCR Package 可见性可能默认为 Private；若需要匿名拉取，请到 GitHub 的 Package Settings 设置为 Public。
@@ -89,19 +89,29 @@ ghcr.io/hutong236/n9e-tools:v0.3.0
 ### 拉取和部署
 
 ```bash
-docker pull ghcr.io/hutong236/n9e-tools:v0.3.0
+docker pull ghcr.io/hutong236/n9e-tools:v0.4.0
 
 docker run --rm -p 127.0.0.1:8088:8088 \
-  ghcr.io/hutong236/n9e-tools:v0.3.0
+  ghcr.io/hutong236/n9e-tools:v0.4.0
 ```
 
 Docker 会按宿主机架构自动选择 amd64 或 arm64 镜像。可以使用：
 
 ```bash
-docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.3.0
+docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.4.0
 ```
 
 检查 manifest 中是否包含两个目标平台。
 
 **安全提醒：** 此 Web 工具目前没有独立登录鉴权，不要将 8088 端口直接暴露公网；建议仅通过 VPN / SSH 隧道访问。工作流只在人工点击 **Run workflow** 时发布镜像；已有 Rust CI 仍按 push/PR 触发。
 
+
+## V0.4.0 Web 页面与批量操作
+
+- 全新简洁布局：Excel 上传与夜莺连接并排，规则区域突出关键统计；长校验说明不再逐行展开，点击“详情”查看原始 PromQL、建议表达式与完整警告。
+- 规则支持关键词、校验状态、规则分组过滤与 20/50/100 条分页。切换搜索/分页会保留勾选状态。
+- **批量禁用候选、批量删除候选仅作用于当前筛选结果中已勾选的规则**。隐藏的其他选中规则不受影响；操作前显示确认对话框。
+- “恢复筛选禁用”恢复当前筛选条件可见的已禁用候选；“恢复删除”恢复本次预览中所有已删除条目。
+- 这些操作只修改浏览器中的临时待导入清单，**绝不删除或启用夜莺已有规则**。新建告警规则仍是 `disabled=1`。
+- 连接测试成功后方可点击导入；变更 URL/Token/业务组/数据源会要求重新测试。测试结果暂不确认数据源 ID 的有效性。
+- 当前尚未在用户的 Nightingale 实例执行实际写入验收；建议先在测试业务组导入少量禁用规则。
