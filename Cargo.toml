@@ -1,8 +1,8 @@
 [package]
 name = "n9e-tools"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "Nightingale v8 Excel red-highlighted alert rule importer"
+description = "Nightingale v8 Excel alert rule importer"
 license = "MIT"
 
 [dependencies]
