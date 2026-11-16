@@ -7,6 +7,8 @@ use excel::Preview;
 type AppState=Arc<Mutex<HashMap<String,Preview>>>;
 
 #[derive(Deserialize)]struct ImportRequest { url:String,token:String,group_id:u64,datasource_id:u64,preview_id:String,rows:Vec<u32>,confirm:bool }
+#[derive(Deserialize)]struct TestConnectionRequest { url:String,token:String,group_id:u64,datasource_id:u64 }
+#[derive(Serialize)]struct ConnectionResult { connected:bool, message:String, existing_rules:usize, group_id:u64, datasource_id:u64, datasource_checked:bool }
 #[derive(Serialize)]struct ResultRow{name:String,status:String,message:String}
 #[derive(Serialize)]struct ImportResult{created:usize,skipped:usize,failed:usize,items:Vec<ResultRow>}
 fn error(code:StatusCode,msg:impl Into<String>)->(StatusCode,Json<Value>){(code,Json(serde_json::json!({"error":msg.into()})))}
@@ -57,16 +59,26 @@ async fn api_json(resp:reqwest::Response)->Result<Value,String>{
  if !ct.contains("json"){return Err(format!("响应不是JSON（{ct}）；确认API路径和认证"))}
  let v=resp.json::<Value>().await.map_err(|e|e.to_string())?;check_api(&v)?;Ok(v)
 }
+async fn test_connection(Json(req):Json<TestConnectionRequest>)->Result<Json<ConnectionResult>,(StatusCode,Json<Value>)>{
+ if req.token.trim().is_empty()||req.group_id==0||req.datasource_id==0{return Err(error(StatusCode::BAD_REQUEST,"Token、业务组 ID、数据源 ID 必填"))}
+ let base=valid_url(&req.url).map_err(|e|error(StatusCode::BAD_REQUEST,e))?;
+ let client=reqwest::Client::builder().timeout(Duration::from_secs(12)).redirect(reqwest::redirect::Policy::none()).build().map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+ let uri=format!("{base}/api/n9e/busi-group/{}/alert-rules",req.group_id);
+ let resp=client.get(uri).header("X-User-Token",&req.token).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,format!("无法连接夜莺：{e}")))?;
+ let value=api_json(resp).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
+ let list=extract_list(&value).map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
+ Ok(Json(ConnectionResult{connected:true,message:"已通过 API 访问目标业务组告警规则；数据源 ID 尚未独立验证".into(),existing_rules:list.len(),group_id:req.group_id,datasource_id:req.datasource_id,datasource_checked:false}))
+}
 async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Result<Json<ImportResult>,(StatusCode,Json<Value>)>{
  if !req.confirm{return Err(error(StatusCode::BAD_REQUEST,"必须先确认导入"))}
  if req.token.trim().is_empty()||req.group_id==0||req.datasource_id==0{return Err(error(StatusCode::BAD_REQUEST,"Token、业务组ID和数据源ID必填"))}
- if req.rows.is_empty()||req.rows.len()>54{return Err(error(StatusCode::BAD_REQUEST,"只能导入预览中选定的1-54条规则"))}
+ if req.rows.is_empty()||req.rows.len()>10000{return Err(error(StatusCode::BAD_REQUEST,"请选择1至10000条有效规则"))}
  let rules={let cache=state.lock().map_err(|_|error(StatusCode::INTERNAL_SERVER_ERROR,"状态锁异常"))?;
   let preview=cache.get(&req.preview_id).ok_or_else(||error(StatusCode::BAD_REQUEST,"预览已失效，请重新上传 Excel"))?;
   let mut seen=HashSet::new();
   if req.rows.iter().any(|row|!seen.insert(*row)){return Err(error(StatusCode::BAD_REQUEST,"重复选择了相同行"))}
   let mut rules=Vec::new();
-  for row in &req.rows {let r=preview.rules.iter().find(|r|r.row==*row).ok_or_else(||error(StatusCode::BAD_REQUEST,"所选行不属于已解析的红色规则"))?;
+  for row in &req.rows {let r=preview.rules.iter().find(|r|r.row==*row).ok_or_else(||error(StatusCode::BAD_REQUEST,"所选行不属于已解析的 Excel 规则"))?;
    rules.push(r.clone());}
   rules
  };
@@ -104,7 +116,7 @@ async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Res
 #[tokio::main]async fn main(){
  tracing_subscriber::fmt::init();
  let state:AppState=Arc::new(Mutex::new(HashMap::new()));
- let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/import",post(import)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state);
+ let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/import",post(import)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state);
  let bind=std::env::var("BIND").unwrap_or("127.0.0.1:8088".into());
  let addr:SocketAddr=bind.parse().expect("BIND must be IP:port");
  let listener=tokio::net::TcpListener::bind(addr).await.unwrap();
