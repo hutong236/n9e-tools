@@ -1,12 +1,13 @@
 mod excel;
-use axum::{extract::{Multipart,DefaultBodyLimit,State},http::StatusCode,response::Html,routing::{get,post},Json,Router};
+use axum::{body::{Body,Bytes},extract::{Multipart,DefaultBodyLimit,State},http::{StatusCode,header},response::{Html,Response},routing::{get,post},Json,Router};
 use serde::{Deserialize,Serialize};
 use serde_json::Value;
 use std::{collections::{HashSet,HashMap},net::SocketAddr,time::Duration,sync::{Arc,Mutex}};
 use excel::Preview;
+use tokio_stream::{wrappers::ReceiverStream,StreamExt};
 type AppState=Arc<Mutex<HashMap<String,Preview>>>;
 
-#[derive(Deserialize)]struct ImportRequest { url:String,token:String,group_id:u64,datasource_id:u64,preview_id:String,rows:Vec<u32>,confirm:bool }
+#[derive(Clone,Deserialize)]struct ImportRequest { url:String,token:String,group_id:u64,datasource_id:u64,preview_id:String,rows:Vec<u32>,confirm:bool }
 #[derive(Deserialize)]struct TestConnectionRequest { url:String,token:String,group_id:u64,datasource_id:u64 }
 #[derive(Serialize)]struct ConnectionResult { connected:bool, message:String, existing_rules:usize, group_id:u64, datasource_id:u64, datasource_checked:bool }
 
@@ -47,7 +48,7 @@ async fn discover(Json(req):Json<DiscoverRequest>)->Result<Json<DiscoverResult>,
  let datasources=parse_options(&ds_json,"datasource").map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  Ok(Json(DiscoverResult{groups,datasources}))
 }
-#[derive(Serialize)]struct ResultRow{name:String,status:String,message:String}
+#[derive(Clone,Serialize)]struct ResultRow{row:u32,name:String,status:String,message:String}
 #[derive(Serialize)]struct ImportResult{created:usize,skipped:usize,failed:usize,items:Vec<ResultRow>}
 fn error(code:StatusCode,msg:impl Into<String>)->(StatusCode,Json<Value>){(code,Json(serde_json::json!({"error":msg.into()})))}
 async fn index()->Html<&'static str>{Html(include_str!("../static/index.html"))}
@@ -107,7 +108,15 @@ async fn test_connection(Json(req):Json<TestConnectionRequest>)->Result<Json<Con
  let list=extract_list(&value).map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  Ok(Json(ConnectionResult{connected:true,message:"已通过 API 访问目标业务组告警规则；数据源 ID 尚未独立验证".into(),existing_rules:list.len(),group_id:req.group_id,datasource_id:req.datasource_id,datasource_checked:false}))
 }
-async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Result<Json<ImportResult>,(StatusCode,Json<Value>)>{
+async fn emit_update(tx:&Option<tokio::sync::mpsc::Sender<Bytes>>, value:Value){
+ if let Some(sender)=tx {
+  if let Ok(mut bytes)=serde_json::to_vec(&value){
+   bytes.push(b'\n');
+   let _=sender.send(Bytes::from(bytes)).await;
+  }
+ }
+}
+async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync::mpsc::Sender<Bytes>>)->Result<ImportResult,(StatusCode,Json<Value>)>{
  if !req.confirm{return Err(error(StatusCode::BAD_REQUEST,"必须先确认导入"))}
  if req.token.trim().is_empty()||req.group_id==0||req.datasource_id==0{return Err(error(StatusCode::BAD_REQUEST,"Token、业务组ID和数据源ID必填"))}
  if req.rows.is_empty()||req.rows.len()>10000{return Err(error(StatusCode::BAD_REQUEST,"请选择1至10000条有效规则"))}
@@ -127,34 +136,74 @@ async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Res
  let existing=api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  let existing=extract_list(&existing).map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  let mut names:HashSet<String>=existing.iter().filter_map(|x|x.get("name").and_then(Value::as_str).map(str::to_owned)).collect();
+ let total=rules.len();
+ emit_update(&updates,serde_json::json!({"type":"started","total":total})).await;
  let mut results=ImportResult{created:0,skipped:0,failed:0,items:vec![]};
- for r in &rules {
-  if names.contains(&r.name){results.skipped+=1;results.items.push(ResultRow{name:r.name.clone(),status:"skipped".into(),message:"同业务组内已存在同名规则".into()});continue}
-  if excel::seconds(&r.duration).is_none()||r.promql.is_empty()||r.name.is_empty()||r.issues.iter().any(|i|i.level=="error"){
-   results.failed+=1;results.items.push(ResultRow{name:r.name.clone(),status:"invalid".into(),message:"规则校验不通过".into()});continue
+ for (index,r) in rules.iter().enumerate(){
+  emit_update(&updates,serde_json::json!({"type":"current","index":index+1,"row":r.row,"name":r.name})).await;
+  let item=if names.contains(&r.name){
+   ResultRow{row:r.row,name:r.name.clone(),status:"skipped".into(),message:"同业务组内已存在同名规则".into()}
+  }else if excel::seconds(&r.duration).is_none()||r.promql.is_empty()||r.name.is_empty()||r.issues.iter().any(|i|i.level=="error"){
+   ResultRow{row:r.row,name:r.name.clone(),status:"invalid".into(),message:"规则校验不通过".into()}
+  }else{
+   let payload=serde_json::json!({
+    "name":r.name,"note":r.note,
+    "group_id":req.group_id,"datasource_queries":[{"match_type":0,"op":"in","values":[req.datasource_id]}],
+    "cate":"prometheus","prod":"metric","severity":1,"disabled":1,
+    "prom_for_duration":r.duration_seconds,"prom_eval_interval":30,"prom_ql":"",
+    "enable_stimes":["00:00"],"enable_etimes":["00:00"],
+    "enable_days_of_weeks":[["0","1","2","3","4","5","6"]],
+    "annotations":{"summary":r.summary,"description":r.description,"suggestion":r.suggestion},
+    "append_tags":[],"notify_rule_ids":[],
+    "rule_config":{"queries":[{"prom_ql":r.promql,"severity":1}]},
+    "notify_repeat_step":0,"notify_max_number":0,"recover_duration":0
+   });
+   let res=client.post(&uri).header("X-User-Token",&req.token).json(&vec![payload]).send().await;
+   let outcome=match res{Ok(response)=>api_json(response).await.and_then(|v|creation_result(&v,&r.name)),Err(e)=>Err(e.to_string())};
+   match outcome{
+    Ok(())=>{
+     names.insert(r.name.clone());
+     ResultRow{row:r.row,name:r.name.clone(),status:"created".into(),message:"API已接受创建请求（默认禁用）".into()}
+    },
+    Err(e)=>ResultRow{row:r.row,name:r.name.clone(),status:"failed".into(),message:e}
+   }
+  };
+  match item.status.as_str(){
+   "created"=>results.created+=1,
+   "skipped"=>results.skipped+=1,
+   _=>results.failed+=1
   }
-  let payload=serde_json::json!({
-   "name":r.name,"note":r.note,
-   "group_id":req.group_id,"datasource_queries":[{"match_type":0,"op":"in","values":[req.datasource_id]}],
-   "cate":"prometheus","prod":"metric","severity":1,"disabled":1,
-   "prom_for_duration":r.duration_seconds,"prom_eval_interval":30,"prom_ql":"",
-   "enable_stimes":["00:00"],"enable_etimes":["00:00"],
-   "enable_days_of_weeks":[["0","1","2","3","4","5","6"]],
-   "annotations":{"summary":r.summary,"description":r.description,"suggestion":r.suggestion},
-   "append_tags":[],"notify_rule_ids":[],
-   "rule_config":{"queries":[{"prom_ql":r.promql,"severity":1}]},
-   "notify_repeat_step":0,"notify_max_number":0,"recover_duration":0
-  });
-  let res=client.post(&uri).header("X-User-Token",&req.token).json(&vec![payload]).send().await;
-  let outcome=match res{Ok(response)=>api_json(response).await.and_then(|v|creation_result(&v,&r.name)),Err(e)=>Err(e.to_string())};
-  match outcome{Ok(())=>{results.created+=1;names.insert(r.name.clone());results.items.push(ResultRow{name:r.name.clone(),status:"created".into(),message:"API已接受创建请求（默认禁用）".into()})},Err(e)=>{results.failed+=1;results.items.push(ResultRow{name:r.name.clone(),status:"failed".into(),message:e})}}
+  emit_update(&updates,serde_json::json!({"type":"item","index":index+1,"total":total,"item":item})).await;
+  results.items.push(item);
  }
- Ok(Json(results))
+ emit_update(&updates,serde_json::json!({"type":"complete","total":total,"created":results.created,"skipped":results.skipped,"failed":results.failed})).await;
+ Ok(results)
+}
+async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Result<Json<ImportResult>,(StatusCode,Json<Value>)>{
+ import_core(state,req,None).await.map(Json)
+}
+async fn import_stream(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Response{
+ // The import continues server-side even if a browser loses its streaming connection.
+ let (tx,rx)=tokio::sync::mpsc::channel::<Bytes>(32);
+ tokio::spawn(async move{
+  let result=import_core(state,req,Some(tx.clone())).await;
+  if let Err((status,Json(details)))=result{
+   let message=details.get("error").and_then(Value::as_str).unwrap_or("导入中止");
+   emit_update(&Some(tx),serde_json::json!({"type":"error","status":status.as_u16(),"message":message})).await;
+  }
+ });
+ let stream=ReceiverStream::new(rx).map(Ok::<Bytes,std::convert::Infallible>);
+ Response::builder()
+  .header(header::CONTENT_TYPE,"application/x-ndjson; charset=utf-8")
+  .header(header::CACHE_CONTROL,"no-cache, no-store")
+  .header("x-accel-buffering","no")
+  .body(Body::from_stream(stream))
+  .expect("valid response headers")
 }
 #[tokio::main]async fn main(){
  tracing_subscriber::fmt::init();
  let state:AppState=Arc::new(Mutex::new(HashMap::new()));
- let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state);
+ let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).route("/api/import-stream",post(import_stream)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state);
  let bind=std::env::var("BIND").unwrap_or("127.0.0.1:8088".into());
  let addr:SocketAddr=bind.parse().expect("BIND must be IP:port");
  let listener=tokio::net::TcpListener::bind(addr).await.unwrap();
