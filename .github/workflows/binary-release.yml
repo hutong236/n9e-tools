@@ -95,25 +95,88 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  summary:
-    name: Package summary
+  publish-release:
+    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: binary-release-${{ inputs.release_label }}
+      cancel-in-progress: false
     steps:
-      - name: Show download instructions
+      - name: Download both platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: n9e-tools-${{ inputs.release_label }}-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Validate release files and checksums
         shell: bash
+        env:
+          RELEASE_LABEL: ${{ inputs.release_label }}
         run: |
+          set -euo pipefail
+          cd release-assets
+          for platform in linux-x86_64 macos-arm64; do
+            archive="n9e-tools-${RELEASE_LABEL}-${platform}.tar.gz"
+            test -s "$archive"
+            test -s "$archive.sha256"
+            shasum -a 256 -c "$archive.sha256"
+          done
+          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 2
+
+      - name: Fail if release already exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_LABEL: ${{ inputs.release_label }}
+        run: |
+          if gh release view "$RELEASE_LABEL" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_LABEL already exists; choose a new version."
+            exit 1
+          fi
+
+      - name: Create release and upload binaries
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_LABEL: ${{ inputs.release_label }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          Nightingale v8 Excel alert-rule importer — $RELEASE_LABEL
+
+          ### Download packages
+          - Linux x86_64: n9e-tools-$RELEASE_LABEL-linux-x86_64.tar.gz
+          - macOS Apple Silicon (arm64): n9e-tools-$RELEASE_LABEL-macos-arm64.tar.gz
+
+          Both packages contain the n9e-tools executable and README.md.
+          SHA-256 checksum files are provided for verification.
+          Run ./n9e-tools after extraction. Default address: http://127.0.0.1:8088
+
+          Source commit: $GITHUB_SHA
+          EOF
+          gh release create "$RELEASE_LABEL" release-assets/*.tar.gz release-assets/*.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "n9e-tools $RELEASE_LABEL" \
+            --notes-file release-notes.md \
+            --latest
+
+      - name: Show published release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_LABEL: ${{ inputs.release_label }}
+        run: |
+          url="$(gh release view "$RELEASE_LABEL" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
           {
-            echo '## Binaries built successfully'
-            echo ''
-            echo 'Download each artifact from the **Artifacts** section of this workflow run.'
-            echo ''
-            echo '| Package | Native architecture |'
-            echo '| --- | --- |'
-            echo '| linux-x86_64 | Linux x86-64 (glibc / Ubuntu 22.04 build environment) |'
-            echo '| macos-arm64 | macOS Apple Silicon (aarch64) |'
-            echo ''
-            echo 'Each artifact contains a tar.gz archive and a SHA-256 checksum.'
-            echo 'Extract and run `./n9e-tools`.'
-            echo 'Default bind address: 127.0.0.1:8088.'
+            echo "## GitHub Release published"
+            echo ""
+            echo "Release: $url"
+            echo ""
+            echo "Assets: Linux x86_64 and macOS arm64 tar.gz plus SHA-256 files."
           } >> "$GITHUB_STEP_SUMMARY"
