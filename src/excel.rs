@@ -44,7 +44,7 @@ fn parse_rows(xml:&str,strings:&[String])->Result<Rows,String>{
    let reference=c.attribute("r").unwrap_or("");let col=reference.chars().take_while(|x|x.is_ascii_alphabetic()).collect::<String>();
    let v=c.children().find(|n|n.has_tag_name("v")).and_then(|x|x.text()).unwrap_or("");
    let value=match c.attribute("t") {Some("s")=>v.parse::<usize>().ok().and_then(|i|strings.get(i)).cloned().unwrap_or_default(),Some("inlineStr")=>text(c),_=>v.to_owned()};
-   if !value.is_empty(){row.insert(col,value);}
+   if !value.is_empty(){row.insert(col.clone(),value);}
    if col=="A"{row.insert("#style".into(),c.attribute("s").unwrap_or("0").into());}
   }
   out.push(row)
