@@ -52,10 +52,10 @@ test("bulk delete applies only to filtered selected rows, restore is possible",(
  const {ui,node}=setup();
  node("search").value="rule1";ui.render();
  const matched=ui.filteredSelected().map(r=>r.row);
- assert.equal(matched.length,5);
+ assert.equal(matched.length,6);
  node("bulkDelete").onclick();
- assert.equal(ui.removed.size,5);
- assert.equal(ui.picks().length,10,"Hidden nonmatches remain selected");
+ assert.equal(ui.removed.size,6);
+ assert.equal(ui.picks().length,9,"Hidden nonmatches remain selected");
  node("restore").onclick();
  assert.equal(ui.removed.size,0);
 });
