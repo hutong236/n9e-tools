@@ -26,8 +26,8 @@ cargo run --release
 ## Docker 启动
 
 ```bash
-docker build -t n9e-tools:0.2 .
-docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.2
+docker build -t n9e-tools:0.3 .
+docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.3
 ```
 
 Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，对远程操作使用受控代理或 VPN。项目的 Web 接口当前没有独立登录功能。
@@ -75,13 +75,13 @@ cargo build --release
 
 进入仓库的 [Actions → Build multi-platform Docker image](https://github.com/hutong236/n9e-tools/actions/workflows/docker-multiarch.yml)，点击 **Run workflow**，选择 `main` 分支并设置：
 
-- `tag`：镜像版本标签，例如 `v0.2.0`（必填，默认 `v0.2.0`）。
+- `tag`：镜像版本标签，例如 `v0.3.0`（必填，默认 `v0.3.0`）。
 - `push_latest`：是否同时覆盖推送 `latest`（默认关闭，发布正式稳定版时才建议勾选）。
 
 工作流使用 Docker Buildx + QEMU，在 GitHub 托管的 Ubuntu Runner 上构建 **linux/amd64** 和 **linux/arm64**，并将统一的多架构 manifest 推送到 GitHub Container Registry：
 
 ```text
-ghcr.io/hutong236/n9e-tools:v0.2.0
+ghcr.io/hutong236/n9e-tools:v0.3.0
 ```
 
 无需额外提供 GHCR 密码。工作流通过 `secrets.GITHUB_TOKEN` 登录，具备 `packages: write` 最小权限。首次发布的 GHCR Package 可见性可能默认为 Private；若需要匿名拉取，请到 GitHub 的 Package Settings 设置为 Public。
@@ -89,16 +89,16 @@ ghcr.io/hutong236/n9e-tools:v0.2.0
 ### 拉取和部署
 
 ```bash
-docker pull ghcr.io/hutong236/n9e-tools:v0.2.0
+docker pull ghcr.io/hutong236/n9e-tools:v0.3.0
 
 docker run --rm -p 127.0.0.1:8088:8088 \
-  ghcr.io/hutong236/n9e-tools:v0.2.0
+  ghcr.io/hutong236/n9e-tools:v0.3.0
 ```
 
 Docker 会按宿主机架构自动选择 amd64 或 arm64 镜像。可以使用：
 
 ```bash
-docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.2.0
+docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.3.0
 ```
 
 检查 manifest 中是否包含两个目标平台。
