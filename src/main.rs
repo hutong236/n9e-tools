@@ -87,8 +87,8 @@ async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Res
    "rule_config":{"queries":[{"prom_ql":r.promql,"severity":1}]},
    "notify_repeat_step":0,"notify_max_number":0,"recover_duration":0
   });
-  let res=client.post(&uri).header("X-User-Token",&req.token).json(&payload).send().await;
-  let outcome=match res{Ok(response)=>api_json(response).await.map(|_|()),Err(e)=>Err(e.to_string())};
+  let res=client.post(&uri).header("X-User-Token",&req.token).json(&vec![payload]).send().await;
+  let outcome=match res{Ok(response)=>api_json(response).await.and_then(|v|{let d=v.get("dat").or_else(||v.get("data")).ok_or("创建接口缺少 dat，无法确认写入结果")?;match d.get(&r.name).and_then(Value::as_str){Some("")=>Ok(()),Some(msg)=>Err(format!("夜莺拒绝规则：{msg}")),None=>Err("创建接口未返回该规则的处理结果".into())}}),Err(e)=>Err(e.to_string())};
   match outcome{Ok(())=>{results.created+=1;names.insert(r.name.clone());results.items.push(ResultRow{name:r.name.clone(),status:"created".into(),message:"API已接受创建请求（默认禁用）".into()})},Err(e)=>{results.failed+=1;results.items.push(ResultRow{name:r.name.clone(),status:"failed".into(),message:e})}}
  }
  Ok(Json(results))
