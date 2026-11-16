@@ -26,8 +26,8 @@ cargo run --release
 ## Docker 启动
 
 ```bash
-docker build -t n9e-tools:0.3 .
-docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.3
+docker build -t n9e-tools:0.4 .
+docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.4
 ```
 
 Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，对远程操作使用受控代理或 VPN。项目的 Web 接口当前没有独立登录功能。
