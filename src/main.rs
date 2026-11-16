@@ -128,3 +128,49 @@ mod tests {
   assert!(extract_list(&serde_json::json!({"dat":null})).is_err());
  }
 }
+
+
+#[cfg(test)]
+mod http_integration_tests {
+ use super::*;
+ use excel::{Issue,Rule};
+ #[tokio::test]
+ async fn import_uses_array_payload_disables_rules_and_skips_existing() {
+  let mock=Router::new().route("/api/n9e/busi-group/1/alert-rules",
+   get(||async{Json(serde_json::json!({"dat":[{"name":"already"}],"err":null}))})
+   .post(|Json(body):Json<Value>|async move{
+    assert!(body.is_array(),"Nightingale v8 create API accepts an array");
+    let v=&body[0];
+    assert_eq!(v["name"],"new");
+    assert_eq!(v["disabled"],1);
+    assert_eq!(v["prom_for_duration"],0);
+    assert_eq!(v["datasource_queries"][0]["values"][0],3);
+    assert_eq!(v["rule_config"]["queries"][0]["prom_ql"],"vector(1)>0");
+    Json(serde_json::json!({"dat":{"new":""},"err":null}))
+   }));
+  let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let addr=listener.local_addr().unwrap();
+  tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
+  let build_rule=|row:u32,name:&str|Rule{
+   row,name:name.into(),group:"synthetic".into(),exporter:"test".into(),category:"test".into(),
+   promql:"vector(1)>0".into(),suggested_promql:String::new(),
+   duration:"0m".into(),duration_seconds:0,suggested_duration:"1m".into(),
+   summary:"test".into(),description:String::new(),suggestion:String::new(),
+   note:String::new(),notification:String::new(),label_requirements:String::new(),
+   recovery:String::new(),repeat:String::new(),issues:Vec::<Issue>::new()
+  };
+  let state:AppState=Arc::new(Mutex::new(HashMap::new()));
+  state.lock().unwrap().insert("fixture".into(),Preview{
+   preview_id:"fixture".into(),sheets:vec![],selected:2,all_rules:2,
+   rules:vec![build_rule(5,"already"),build_rule(6,"new")],workbook_warnings:vec![]
+  });
+  let request=ImportRequest{
+   url:format!("http://{addr}"),token:"test-token".into(),group_id:1,datasource_id:3,
+   preview_id:"fixture".into(),rows:vec![5,6],confirm:true
+  };
+  let result=import(State(state),Json(request)).await.unwrap().0;
+  assert_eq!(result.created,1);
+  assert_eq!(result.skipped,1);
+  assert_eq!(result.failed,0);
+ }
+}
