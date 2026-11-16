@@ -111,3 +111,75 @@ test("connection discovery opens picker and fills both IDs only after confirmati
  assert.equal(node("targetDialog").open,false);
  assert.match(node("connectionStatus").textContent,/生产业务组/);
 });
+
+test("live import dashboard tracks actual item events and supports result filtering",()=>{
+ const nodes=new Map();
+ function node(id){
+  if(!nodes.has(id))nodes.set(id,{
+   value:id==="pageSize"?"20":id==="filter"?"all":id==="importFilter"?"all":"",
+   textContent:"",innerHTML:"",disabled:false,checked:false,className:"",
+   style:{},setAttribute(){},scrollIntoView(){},
+   classList:{add(){},remove(){}},
+   addEventListener(){},appendChild(){},showModal(){},close(){}
+  });
+  return nodes.get(id);
+ }
+ const document={getElementById:node,createElement(){return {value:"",textContent:""}}};
+ const ui=new Function("document","confirm","alert","fetch",script+
+  "\nreturn {resetImportJob,importEvent,consumeImportStream,getJob:()=>importJob};")(
+   document,()=>true,()=>{},async()=>{throw Error("network is not expected")}
+ );
+ ui.resetImportJob([5,6,7]);
+ assert.equal(node("importProgressBar").disabled,false);
+ assert.equal(node("importCreated").textContent,0);
+ ui.importEvent({type:"started",total:3});
+ ui.importEvent({type:"current",index:1,row:5,name:"new"});
+ assert.match(node("importCurrent").textContent,/new/);
+ ui.importEvent({type:"item",item:{row:5,name:"new",status:"created",message:"API accepted"}});
+ assert.equal(node("importCreated").textContent,1);
+ assert.equal(node("importPending").textContent,2);
+ assert.equal(node("importPercent").textContent,"33%");
+ ui.importEvent({type:"item",item:{row:6,name:"duplicate",status:"skipped",message:"已存在"}});
+ ui.importEvent({type:"item",item:{row:7,name:"bad",status:"failed",message:"HTTP 400"}});
+ ui.importEvent({type:"complete",total:3,created:1,skipped:1,failed:1});
+ assert.equal(node("importPercent").textContent,"100%");
+ assert.equal(node("importFailed").textContent,1);
+ assert.equal(node("importPending").textContent,0);
+ assert.match(node("importState").textContent,/已完成/);
+ assert.equal(ui.getJob().items.length,3);
+ node("importFilter").value="failed";
+ ui.importEvent({type:"item",item:{row:8,name:"next",status:"invalid",message:"expression"}}); 
+ assert.match(node("importRows").innerHTML,/bad/);
+ assert.doesNotMatch(node("importRows").innerHTML,/duplicate/);
+});
+test("NDJSON stream parser handles events split between network chunks",async()=>{
+ const nodes=new Map();
+ function node(id){
+  if(!nodes.has(id))nodes.set(id,{
+   value:id==="pageSize"?"20":id==="filter"?"all":id==="importFilter"?"all":"",
+   textContent:"",innerHTML:"",disabled:false,checked:false,className:"",
+   style:{},setAttribute(){},scrollIntoView(){},
+   classList:{add(){},remove(){}},addEventListener(){},appendChild(){},showModal(){},close(){}
+  });
+  return nodes.get(id);
+ }
+ const document={getElementById:node,createElement(){return {value:"",textContent:""}}};
+ const ui=new Function("document","confirm","alert","fetch",script+
+  "\nreturn {resetImportJob,consumeImportStream,getJob:()=>importJob};")(
+   document,()=>true,()=>{},async()=>{throw Error("network is not expected")}
+ );
+ ui.resetImportJob([5]);
+ const payload=[
+  JSON.stringify({type:"started",total:1}),
+  JSON.stringify({type:"item",item:{row:5,name:"one",status:"created",message:"ok"}}),
+  JSON.stringify({type:"complete",total:1,created:1,skipped:0,failed:0})
+ ].join("\n")+"\n";
+ const bytes=new TextEncoder().encode(payload);
+ const slices=[bytes.slice(0,13),bytes.slice(13,26),bytes.slice(26)];
+ let index=0;
+ const response={ok:true,body:{getReader(){return {async read(){return index<slices.length?{value:slices[index++],done:false}:{done:true}}}}}};
+ await ui.consumeImportStream(response);
+ assert.equal(ui.getJob().phase,"complete");
+ assert.equal(ui.getJob().processed,1);
+ assert.equal(ui.getJob().created,1);
+});
