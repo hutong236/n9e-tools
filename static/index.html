@@ -1,137 +1,265 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>夜莺 v8 · Excel 告警规则导入</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nightingale · 告警规则导入</title>
 <style>
-:root{font:15px system-ui,sans-serif;color:#17243a;background:#f4f6fb}body{margin:0}
-main{max-width:1200px;margin:30px auto;padding:0 20px}header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
-.card{background:white;border:1px solid #e1e7ef;border-radius:14px;padding:20px;margin:15px 0;box-shadow:0 3px 12px #202c4010}
-h1{font-size:24px}h2{font-size:18px;margin-top:0}.help{color:#65748c;font-size:13px;line-height:1.6}.row{display:flex;flex-wrap:wrap;gap:14px;align-items:end}
-.field{display:grid;flex:1;min-width:150px;gap:6px}label{font-size:13px;font-weight:600}
-input,button{box-sizing:border-box;border-radius:8px;font:inherit;padding:10px;border:1px solid #cad3e0}
-input:not([type=checkbox]){width:100%}button{background:#216be5;color:white;border:none;cursor:pointer}button:disabled{background:#b6c4d8;cursor:default}
-.secondary{background:#e8f0fe;color:#1a55a5}.badge{display:inline-block;padding:7px 10px;background:#edf4ff;border-radius:50px;font-size:12px;color:#245cb2}
-table{width:100%;border-collapse:collapse;min-width:980px;font-size:13px}th,td{padding:10px;border-bottom:1px solid #e9edf4;text-align:left;vertical-align:top}
-th{background:#f8faff;position:sticky;top:0}.tablebox{overflow:auto;max-height:560px}
-details{max-width:490px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.bad{color:#bf303e}.warn{color:#99600c}.ok{color:#0b7d57}
-#summary,#result{white-space:pre-wrap;margin:12px 0;font-size:13px}
+:root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft Yahei",sans-serif;color:#1d2939;background:#f4f6fa;font-size:14px}
+*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.45}a{color:#2563eb}
+.shell{max-width:1480px;margin:0 auto;padding:26px 32px 80px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:24px}.brand{display:flex;align-items:center;gap:14px}.logo{background:#1d4ed8;color:#fff;width:42px;height:42px;display:grid;place-items:center;border-radius:13px;font-size:19px;font-weight:800}
+h1{font-size:24px;line-height:1.3;margin:0;font-weight:750;letter-spacing:-.5px}.subtitle{color:#778397;font-size:12px;margin:5px 0 0}.version{color:#475569;background:#e9edf5;padding:6px 11px;border-radius:20px;font-size:12px}
+.steps{display:flex;align-items:center;gap:8px;color:#64748b;font-size:12px;margin:0 0 22px}.step{display:flex;align-items:center;gap:7px}.stepnum{display:grid;place-items:center;border:1px solid #cbd5e1;border-radius:50%;width:23px;height:23px;font-size:12px;font-weight:700}.stepnum.current{color:#fff;background:#2563eb;border-color:#2563eb}.chevron{color:#b1bccd;padding:0 10px}
+.grid-top{display:grid;grid-template-columns:minmax(320px,1fr) minmax(470px,1.25fr);gap:16px;align-items:stretch}
+.card{background:#fff;border:1px solid #e1e7ef;border-radius:16px;box-shadow:0 2px 8px rgba(19,37,67,.035);margin-bottom:16px}.card-inner{padding:23px 25px}.section-head{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:18px}.section-title{font-size:17px;font-weight:750;margin:0}.section-desc{color:#718096;font-size:12px;margin:4px 0 0}.section-num{display:inline-grid;place-items:center;background:#eff5ff;color:#2563eb;width:27px;height:27px;border-radius:9px;margin-right:9px;font-weight:800;font-size:13px}
+.tag{font-size:11px;border-radius:999px;background:#edf2fb;color:#475569;padding:5px 9px;white-space:nowrap}.tag.success{color:#08775b;background:#e6f6ee}.tag.warn{color:#926012;background:#fff4dc}.tag.error{color:#b42331;background:#feecec}
+.btn{background:#2563eb;color:#fff;border:1px solid #2563eb;border-radius:9px;min-height:38px;padding:8px 14px;font-weight:650;white-space:nowrap;transition:background .15s}.btn:hover:not(:disabled){background:#1d4ed8}.btn.soft{background:#f0f5ff;color:#245ac5;border-color:#e1eaff}.btn.soft:hover:not(:disabled){background:#e3edff}.btn.ghost{background:#fff;color:#475569;border-color:#dce3ed}.btn.ghost:hover:not(:disabled){background:#f7f9fc}.btn.danger{color:#bc2638;background:#fff5f5;border-color:#f6dadd}.btn.danger:hover:not(:disabled){background:#ffe7e9}.btn.small{min-height:32px;padding:6px 10px;font-weight:600;font-size:12px}.btn.text{border:0;background:transparent;color:#2563eb;padding:4px 6px;min-height:auto}.btn.text:hover:not(:disabled){background:#f0f5ff}.btn.text.danger-text{color:#b42331}
+.upload{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end}.field{display:flex;flex-direction:column;gap:6px;min-width:0}.field label{font-size:12px;color:#526174;font-weight:650}.control{background:#fff;border:1px solid #d5deeb;border-radius:9px;min-height:38px;padding:8px 11px;color:#263449;width:100%;outline:none}.control:focus{border-color:#4e83ef;box-shadow:0 0 0 3px #2563eb19}input[type=file].control{padding:6px 9px;max-width:100%;font-size:12px}
+.connection-fields{display:grid;grid-template-columns:1.3fr 1fr 86px 95px;gap:10px;align-items:end}.connection-footer{display:flex;gap:11px;align-items:center;margin-top:14px;flex-wrap:wrap}.statusline{font-size:12px;color:#64748b}.statusline.success{color:#068363}.statusline.error{color:#c03543}
+.file-info{margin-top:15px;padding:11px 13px;border-radius:9px;background:#f5f8ff;display:none;color:#3d526c;font-size:12px;line-height:1.65}.file-info.visible{display:block}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin:4px 0 18px}.stat{border:1px solid #e8ecf2;border-radius:11px;padding:13px 15px;background:#fbfcff}.stat strong{font-size:24px;line-height:1.1;display:block;font-variant-numeric:tabular-nums}.stat span{display:block;color:#758397;font-size:12px;margin-top:7px}.stat .error{color:#b42331}.stat .warn{color:#a66c13}.stat .success{color:#148260}
+.toolbar{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-bottom:12px}.toolbar .searchbox{width:min(100%,350px)}.toolbar .filterbox{width:170px}.toolbar .groupbox{width:180px}.toolbar .spacer{flex:1}
+.selection-bar{background:#f8faff;border:1px solid #e5ebf5;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px}.selection-note{font-size:12px;color:#68778e;margin-right:auto}.selection-note strong{color:#1d4ed8}.scope-label{font-size:11px;color:#718096;width:100%;margin-bottom:1px}
+.table-wrap{border:1px solid #e6ebf2;border-radius:10px;overflow-x:auto}table{border-collapse:collapse;width:100%}th{text-align:left;background:#f8fafd;color:#64748b;font-size:11px;font-weight:650;padding:12px 14px;white-space:nowrap;border-bottom:1px solid #e4eaf2}td{font-size:12px;padding:14px;border-bottom:1px solid #edf0f5;vertical-align:middle;color:#475569}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#fbfcff}tbody tr.is-paused{background:#fafbfe;opacity:.75}td.checkcol{width:38px}td.numcol{width:72px;color:#94a0b0;font-variant-numeric:tabular-nums}td.rulecol{min-width:250px;max-width:340px}td.querycol{min-width:220px;max-width:300px}.rule-name{font-weight:750;color:#202c3f;font-size:13px;overflow-wrap:anywhere}.rule-sub{font-size:11px;color:#8b97a8;margin-top:5px}.query-preview{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:290px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#58667c;font-size:11px}.validation{display:flex;gap:7px;align-items:center}.row-actions{display:flex;gap:5px;white-space:nowrap}
+.pagination{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:14px 0 0}.pagination .meta{margin-right:auto;color:#8290a4;font-size:12px}
+.result-card{display:none}.result-card.visible{display:block}.result-text{color:#334155;line-height:1.65;font-size:12px;white-space:pre-wrap}.callout{color:#697c95;font-size:12px;line-height:1.7;margin-top:14px}.callout summary{cursor:pointer}.callout ul{margin:8px 0;padding-left:20px}
+.footerline{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.footerline .muted{color:#7a879b;font-size:12px;line-height:1.5}.checkline{display:flex;align-items:flex-start;gap:9px;margin:0 0 14px;color:#42516a;font-size:13px;line-height:1.6}.checkline input{margin-top:4px}
+dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px));max-height:85vh;box-shadow:0 20px 70px #14233e40}dialog::backdrop{background:#11213b8c}.dialog-head{padding:19px 22px;border-bottom:1px solid #e5eaf0;display:flex;justify-content:space-between;align-items:center;gap:12px}.dialog-body{padding:21px 23px;overflow:auto;max-height:calc(85vh - 83px)}.dialog-title{font-size:17px;margin:0;overflow-wrap:anywhere}.detail-label{font-size:11px;color:#8390a3;font-weight:700;margin:19px 0 8px}.detail-value{white-space:pre-wrap;overflow-wrap:anywhere;color:#344154;font-size:13px;line-height:1.7}.code{background:#f6f8fc;border:1px solid #e6ebf4;border-radius:9px;padding:13px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.empty{padding:42px;text-align:center;color:#8290a4}.hidden{display:none!important}
+@media(max-width:1080px){.grid-top{grid-template-columns:1fr}.connection-fields{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.shell{padding:16px 12px 50px}.topbar{align-items:flex-start}h1{font-size:20px}.steps{flex-wrap:wrap}.chevron{padding:0 2px}.card-inner{padding:16px}.upload{grid-template-columns:1fr}.connection-fields{grid-template-columns:1fr 1fr}.connection-fields .field:first-child,.connection-fields .field:nth-child(2){grid-column:span 2}.stats{grid-template-columns:repeat(2,1fr)}.toolbar .searchbox,.toolbar .filterbox,.toolbar .groupbox{width:100%}.pagination{flex-wrap:wrap}}
 </style>
 </head>
-<body><main>
-<header><div><h1>夜莺 v8 告警规则批量导入</h1><div class="help">Rust + Axum · 特定 11 Sheet Excel 模板</div></div><span class="badge">全部有效规则 · 原始 PromQL · 同名跳过 · 默认禁用</span></header>
-<section class="card"><h2>① 上传 Excel 并解析</h2><div class="row"><div class="field"><label>文件（.xlsx）</label><input type="file" id="file" accept=".xlsx"></div><button id="preview">解析 / 校验 / 预览</button></div><div id="summary">尚未上传文件</div></section>
-<section class="card"><h2>② Nightingale 连接</h2><div class="row"><div class="field"><label>夜莺 URL</label><input id="url" placeholder="https://n9e.internal"></div><div class="field"><label>X-User-Token</label><input type="password" id="token" autocomplete="off"></div><div class="field"><label>业务组 ID</label><input type="number" min="1" id="group"></div><div class="field"><label>数据源 ID</label><input type="number" min="1" id="datasource"></div></div><div class="row" style="margin-top:12px"><button type="button" id="testConnection" class="secondary">测试 Nightingale 连接</button><span id="connectionStatus" role="status" aria-live="polite" class="help">尚未测试</span></div><p class="help">请从夜莺界面确认目标业务组和数据源 ID。导入工具不会自动建立通知路由、接收组或采集侧标签。请在可信内网使用。</p></section>
-<section class="card"><div class="row" style="justify-content:space-between"><h2>③ 校验及逐条勾选 <span class="badge" id="count">0 条</span></h2><div class="row"><button class="secondary" id="all" disabled>全选可导入</button><button class="secondary" id="none" disabled>清空</button><button class="secondary" id="export" disabled>下载预览 JSON</button></div></div>
-<div class="row" style="margin-bottom:12px"><div class="field"><label for="search">搜索规则名、分组或 PromQL</label><input id="search" placeholder="输入关键词过滤"></div><div class="field"><label for="filter">校验过滤</label><select id="filter"><option value="all">全部</option><option value="error">仅错误</option><option value="warning">仅警告</option><option value="valid">校验通过</option><option value="active">仅待导入</option><option value="disabled">已禁用的候选</option></select></div><button class="secondary" id="restore" disabled>恢复删除的行</button></div><div class="tablebox"><table><thead><tr><th>选择</th><th>Excel 行</th><th>名称 / 分组</th><th>原始持续时间</th><th>原始 PromQL</th><th>校验信息</th><th>操作（仅本次导入）</th></tr></thead><tbody id="rules"><tr><td colspan="7">请先上传</td></tr></tbody></table></div>
-<p class="help">“禁用”会将该候选从本次导入选择中排除，“删除”仅从本次预览清单移除，不会操作夜莺现有规则。错误规则自动禁止选择；警告规则必须由操作者确认后才能写入。保留原始 0m（0 秒）持续时间，不替换为建议值。</p>
-</section>
-<section class="card"><h2>④ 执行禁用规则导入</h2><label><input type="checkbox" id="confirm"> 我已核对目标业务组、数据源、原始表达式与警告，确认创建的规则将保持禁用</label>
-<p><button id="import" disabled>确认导入（同名跳过）</button></p><div id="result"></div></section>
-<div class="help">注意：此工具的 Nightingale v8 POST 字段需要在目标小版本测试环境验收。返回已创建只表示 API 接受请求，不能等同于告警已能触发或通知已配置。</div>
+<body>
+<main class="shell">
+<header class="topbar"><div class="brand"><span class="logo">N</span><div><h1>告警规则批量导入</h1><p class="subtitle">Nightingale v8 · Excel 导入助手 · 预览确认后才写入</p></div></div><span class="version">v0.4.0</span></header>
+<nav class="steps" aria-label="导入流程"><div class="step"><span class="stepnum current">1</span>解析 Excel</div><span class="chevron">›</span><div class="step"><span class="stepnum current">2</span>连接夜莺</div><span class="chevron">›</span><div class="step"><span class="stepnum current">3</span>筛选规则</div><span class="chevron">›</span><div class="step"><span class="stepnum current">4</span>确认导入</div></nav>
+<div class="grid-top">
+<section class="card"><div class="card-inner">
+<div class="section-head"><div><h2 class="section-title"><span class="section-num">1</span>上传 Excel</h2><p class="section-desc">读取全部有效告警规则，不按标红颜色筛选</p></div></div>
+<div class="upload"><div class="field"><label for="file">工作簿 .xlsx</label><input id="file" type="file" class="control" accept=".xlsx"></div><button class="btn" id="preview">解析规则</button></div>
+<div id="summary" class="file-info" role="status" aria-live="polite"></div>
+</div></section>
+<section class="card"><div class="card-inner">
+<div class="section-head"><div><h2 class="section-title"><span class="section-num">2</span>Nightingale 连接</h2><p class="section-desc">连接测试只验证 API 和业务组；数据源 ID 暂不独立验证</p></div></div>
+<div class="connection-fields">
+<div class="field"><label for="url">夜莺地址</label><input class="control" id="url" placeholder="http://n9e.internal:17000"></div>
+<div class="field"><label for="token">X-User-Token</label><input class="control" id="token" type="password" autocomplete="off" placeholder="输入访问 Token"></div>
+<div class="field"><label for="group">业务组 ID</label><input class="control" id="group" type="number" min="1" placeholder="1"></div>
+<div class="field"><label for="datasource">数据源 ID</label><input class="control" id="datasource" type="number" min="1" placeholder="1"></div>
+</div>
+<div class="connection-footer"><button class="btn soft" id="testConnection">测试连接</button><span id="connectionStatus" class="statusline" role="status" aria-live="polite">未测试</span></div>
+</div></section>
+</div>
+<section class="card"><div class="card-inner">
+<div class="section-head"><div><h2 class="section-title"><span class="section-num">3</span>校验与筛选规则</h2><p class="section-desc">通过筛选定位规则，再操作当前筛选结果；原始 PromQL 与持续时间保持不变</p></div><button class="btn ghost small" id="export" disabled>导出预览 JSON</button></div>
+<div class="stats">
+<div class="stat"><strong id="statTotal">—</strong><span>已解析规则</span></div>
+<div class="stat"><strong id="statSelected" class="success">—</strong><span>待导入（已勾选）</span></div>
+<div class="stat"><strong id="statWarning" class="warn">—</strong><span>存在警告</span></div>
+<div class="stat"><strong id="statExcluded">—</strong><span>禁用 / 删除候选</span></div>
+</div>
+<div class="toolbar">
+<div class="field searchbox"><label for="search">快速搜索</label><input id="search" class="control" placeholder="规则名称、分组、Exporter、PromQL"></div>
+<div class="field filterbox"><label for="filter">校验及状态</label><select id="filter" class="control"><option value="all">全部规则</option><option value="error">有错误</option><option value="warning">有警告</option><option value="valid">可导入</option><option value="selected">已勾选</option><option value="paused">已禁用候选</option></select></div>
+<div class="field groupbox"><label for="groupFilter">规则分组</label><select id="groupFilter" class="control"><option value="">全部分组</option></select></div>
+<button class="btn ghost small" id="clearFilters">重置筛选</button>
+</div>
+<div class="selection-bar">
+<div class="scope-label">批量操作范围：仅对<strong>当前筛选结果内已勾选</strong>的规则生效，不影响未匹配的规则</div>
+<div class="selection-note" id="visibleCount">请先上传 Excel</div>
+<button class="btn ghost small" id="all" disabled>勾选筛选结果</button>
+<button class="btn ghost small" id="none" disabled>取消筛选勾选</button>
+<button class="btn soft small" id="bulkDisable" disabled>批量禁用候选</button>
+<button class="btn danger small" id="bulkDelete" disabled>批量删除候选</button>
+<button class="btn ghost small" id="restore" disabled>恢复删除</button>
+<button class="btn ghost small" id="bulkEnable" disabled>恢复筛选禁用</button>
+</div>
+<div class="table-wrap">
+<table><thead><tr><th>勾选</th><th>Excel 行</th><th>规则名称 / 分组</th><th>持续时间</th><th>原始 PromQL</th><th>校验状态</th><th>操作</th></tr></thead>
+<tbody id="rules"><tr><td colspan="7" class="empty">上传 Excel 后在此预览全部规则</td></tr></tbody></table>
+</div>
+<div class="pagination"><span id="paginationMeta" class="meta">0 条</span><label for="pageSize" class="subtitle">每页</label><select id="pageSize" class="control" style="width:80px"><option value="20">20 条</option><option value="50">50 条</option><option value="100">100 条</option></select><button id="prevPage" class="btn ghost small" disabled>上一页</button><span id="pageInfo" class="subtitle">1 / 1</span><button id="nextPage" class="btn ghost small" disabled>下一页</button></div>
+<details class="callout"><summary>导入规则与校验说明</summary><ul><li>警告不阻断导入；错误规则不可勾选。点击「查看详情」查看完整校验提示、原始与建议 PromQL。</li><li>“禁用候选”表示暂不参与本次导入；“删除候选”只从本次预览中移除，不会操作 Nightingale 中已有规则。</li><li>即使在此恢复候选，新建到夜莺的规则仍默认 <strong>disabled=1</strong>；保留原始 0m 持续时间。</li><li>通知路由、标签前置条件由操作者确认，不由导入工具自动生成。</li></ul></details>
+</div></section>
+<section class="card"><div class="card-inner">
+<div class="section-head"><div><h2 class="section-title"><span class="section-num">4</span>确认并执行导入</h2><p class="section-desc">同业务组同名跳过，创建的规则保持禁用；先用测试业务组验证</p></div><span class="tag">不会更新已有规则</span></div>
+<div class="footerline"><label class="checkline"><input type="checkbox" id="confirm"><span>我已确认目标业务组、数据源及校验警告，并了解导入后规则仍处于禁用状态。</span></label><button class="btn" id="import" disabled>导入选中规则（0）</button></div>
+<div id="resultCard" class="result-card"><hr style="border:0;border-top:1px solid #edf1f6;margin:20px 0"><div class="footerline"><strong>导入结果</strong><button class="btn soft small" id="downloadResult" disabled>下载结果 JSON</button></div><div id="result" class="result-text" aria-live="polite"></div></div>
+</div></section>
+<div class="callout" style="margin-top:8px">安全提示：本工具当前无独立登录鉴权，请仅部署在可信内网。API 返回创建成功不代表告警已启用或通知渠道已配置。</div>
 </main>
+<dialog id="detailDialog" aria-labelledby="detailTitle"><div class="dialog-head"><h2 id="detailTitle" class="dialog-title">规则详情</h2><button id="closeDialog" class="btn ghost small" aria-label="关闭规则详情">关闭</button></div><div class="dialog-body" id="detailBody"></div></dialog>
 <script>
-let preview=null;
-const removed=new Set(), excluded=new Set(), selected=new Set();
+"use strict";
 const $=id=>document.getElementById(id);
-const esc=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-const valid=r=>!r.issues.some(i=>i.level==='error');
-const candidates=()=>preview?preview.rules.filter(r=>!removed.has(r.row)&&!excluded.has(r.row)&&valid(r)):[];
-const picks=()=>[...selected].filter(row=>!removed.has(row)&&!excluded.has(row)&&preview?.rules.some(r=>r.row===row&&valid(r)));
-function update(){
- const n=picks().length;
- $('count').textContent='已选择 '+n+' / '+(preview?.rules.length||0)+'；删除 '+removed.size+'；禁用候选 '+excluded.size;
- $('import').disabled=!preview||!n||!$('confirm').checked;
- $('restore').disabled=!preview||removed.size===0;
-}
-function visible(r){
- const q=$('search').value.trim().toLowerCase();
- if(q&&![r.name,r.group,r.exporter,r.promql].some(x=>String(x).toLowerCase().includes(q)))return false;
- const status=$('filter').value;
- if(status==='error')return r.issues.some(x=>x.level==='error');
- if(status==='warning')return r.issues.some(x=>x.level==='warning');
- if(status==='valid')return valid(r);
- if(status==='active')return !excluded.has(r.row);
- if(status==='disabled')return excluded.has(r.row);
+const escapeHTML=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+let preview=null, connectionOK=false, importing=false, page=1, lastResult=null;
+const selected=new Set(), paused=new Set(), removed=new Set();
+const isValid=r=>!r.issues.some(i=>i.level==="error");
+const hasWarning=r=>r.issues.some(i=>i.level==="warning");
+const getRule=row=>preview?.rules.find(r=>r.row===row);
+const eligible=r=>!removed.has(r.row)&&!paused.has(r.row)&&isValid(r);
+const picks=()=>preview?preview.rules.filter(r=>eligible(r)&&selected.has(r.row)).map(r=>r.row):[];
+function filtersMatch(r){
+ const q=$("search").value.trim().toLowerCase();
+ if(q&&![r.name,r.group,r.exporter,r.promql].some(v=>String(v||"").toLowerCase().includes(q)))return false;
+ if($("groupFilter").value&&r.group!==$("groupFilter").value)return false;
+ const f=$("filter").value;
+ if(f==="error")return !isValid(r);
+ if(f==="warning")return hasWarning(r);
+ if(f==="valid")return isValid(r);
+ if(f==="selected")return selected.has(r.row)&&eligible(r);
+ if(f==="paused")return paused.has(r.row);
  return true;
 }
+function filteredRows(){return preview?preview.rules.filter(r=>!removed.has(r.row)&&filtersMatch(r)):[]}
+function filteredSelected(){return filteredRows().filter(r=>eligible(r)&&selected.has(r.row))}
+function markTestInvalid(){connectionOK=false;$("connectionStatus").className="statusline";$("connectionStatus").textContent="连接参数已变更，请重新测试";update()}
+function update(){
+ const count=picks().length, visible=filteredRows(), inScope=filteredSelected().length;
+ $("statTotal").textContent=preview?preview.rules.length:"—";
+ $("statSelected").textContent=preview?count:"—";
+ $("statWarning").textContent=preview?preview.rules.filter(hasWarning).length:"—";
+ $("statExcluded").textContent=preview?paused.size+" / "+removed.size:"—";
+ $("visibleCount").innerHTML="匹配 <strong>"+visible.length+"</strong> 条；其中已勾选 <strong>"+inScope+"</strong> 条；全局待导入 "+count+" 条";
+ $("all").disabled=!preview||importing||!visible.some(r=>eligible(r)&&!selected.has(r.row));
+ $("none").disabled=!preview||importing||!inScope;
+ $("bulkDisable").disabled=!preview||importing||!inScope;
+ $("bulkDelete").disabled=!preview||importing||!inScope;
+ $("restore").disabled=!preview||importing||removed.size===0;
+ $("bulkEnable").disabled=!preview||importing||!visible.some(r=>paused.has(r.row));
+ $("export").disabled=!preview||importing;
+ $("import").disabled=!preview||!connectionOK||!count||!$("confirm").checked||importing;
+ $("import").textContent=importing?"正在导入…":"导入选中规则（"+count+"）";
+ $("preview").disabled=importing;
+ $("testConnection").disabled=importing;
+}
 function render(){
- if(!preview){selected.clear();$('rules').innerHTML='<tr><td colspan="7">请先上传 Excel</td></tr>';update();return}
- const rows=preview.rules.filter(r=>!removed.has(r.row)&&visible(r));
- $('rules').innerHTML=rows.map(r=>{
-  const disabled=excluded.has(r.row),hasError=!valid(r);
-  const checked=!disabled&&!hasError&&selected.has(r.row);
-  return '<tr><td><input class="pick" type="checkbox" value="'+r.row+'" '+(disabled||hasError?'disabled':'')+' '+(checked?'checked':'')+'></td>'+
-   '<td>'+r.row+'</td><td><b>'+esc(r.name)+'</b><br><small>'+esc(r.group)+' / '+esc(r.exporter)+'</small></td>'+
-   '<td>'+esc(r.duration)+' ('+r.duration_seconds+'s)</td>'+
-   '<td><details><summary>查看 PromQL</summary><pre>'+esc(r.promql)+'</pre></details></td>'+
-   '<td>'+(r.issues.map(x=>'<div class="'+(x.level==='error'?'bad':'warn')+'">'+esc(x.message)+'</div>').join('')||'<span class="ok">通过</span>')+'</td>'+
-   '<td><button class="secondary disable-rule" data-row="'+r.row+'">'+(disabled?'启用候选':'禁用候选')+'</button> <button class="secondary remove-rule" data-row="'+r.row+'">删除</button></td></tr>'
- }).join('')||'<tr><td colspan="7">当前条件下没有规则</td></tr>';
- document.querySelectorAll('.pick').forEach(e=>e.onchange=()=>{const row=Number(e.value);if(e.checked)selected.add(row);else selected.delete(row);update()});
- document.querySelectorAll('.disable-rule').forEach(b=>b.onclick=()=>{
-  const row=Number(b.dataset.row);
-  if(excluded.has(row)){excluded.delete(row);if(preview.rules.some(r=>r.row===row&&valid(r)))selected.add(row)}else{excluded.add(row);selected.delete(row)}
-  // Maintain the visible selected rows on re-render.
-  render();
- });
- document.querySelectorAll('.remove-rule').forEach(b=>b.onclick=()=>{
-  const row=Number(b.dataset.row);removed.add(row);selected.delete(row);render();
- });
+ if(!preview){$("rules").innerHTML='<tr><td class="empty" colspan="7">上传 Excel 后在此预览全部规则</td></tr>';update();return}
+ const matches=filteredRows(),size=Number($("pageSize").value)||20;
+ const pageCount=Math.max(1,Math.ceil(matches.length/size));
+ page=Math.min(Math.max(1,page),pageCount);
+ const subset=matches.slice((page-1)*size,page*size);
+ $("rules").innerHTML=subset.map(r=>{
+  const pending=paused.has(r.row),allowed=isValid(r),checked=selected.has(r.row)&&!pending&&allowed;
+  const severity=!allowed?'<span class="tag error">错误 '+r.issues.filter(x=>x.level==="error").length+'</span>':hasWarning(r)?'<span class="tag warn">警告 '+r.issues.filter(x=>x.level==="warning").length+'</span>':'<span class="tag success">通过</span>';
+  return '<tr class="'+(pending?'is-paused':'')+'"><td class="checkcol"><input aria-label="选择 '+escapeHTML(r.name)+'" class="pick" type="checkbox" data-row="'+r.row+'" '+(checked?'checked ':'')+(!allowed||pending||importing?'disabled ':'')+'></td>'+
+   '<td class="numcol">'+r.row+'</td><td class="rulecol"><div class="rule-name">'+escapeHTML(r.name)+'</div><div class="rule-sub">'+escapeHTML(r.group||"未分类")+(r.exporter?" · "+escapeHTML(r.exporter):"")+'</div></td>'+
+   '<td style="white-space:nowrap">'+escapeHTML(r.duration)+' <span class="subtitle">('+r.duration_seconds+'s)</span></td>'+
+   '<td class="querycol"><div class="query-preview" title="'+escapeHTML(r.promql)+'">'+escapeHTML(r.promql)+'</div></td>'+
+   '<td><div class="validation">'+severity+(pending?'<span class="tag">候选禁用</span>':'')+'</div></td>'+
+   '<td><div class="row-actions"><button type="button" class="btn text small detail" data-row="'+r.row+'">详情</button><button type="button" class="btn text small toggle" data-row="'+r.row+'" '+(importing?'disabled':'')+'>'+(pending?'恢复':'禁用')+'</button><button type="button" class="btn text small danger-text remove" data-row="'+r.row+'" '+(importing?'disabled':'')+'>删除</button></div></td></tr>';
+ }).join("")||'<tr><td class="empty" colspan="7">没有符合筛选条件的规则。可重置筛选条件或恢复已删除规则。</td></tr>';
+ $("paginationMeta").textContent="显示 "+(matches.length?(page-1)*size+1:0)+"–"+Math.min(page*size,matches.length)+" / "+matches.length+" 条";
+ $("pageInfo").textContent=page+" / "+pageCount;
+ $("prevPage").disabled=page<=1;
+ $("nextPage").disabled=page>=pageCount;
  update();
 }
-$('search').oninput=render;
-$('filter').onchange=render;
-$('restore').onclick=()=>{removed.clear();render()};
-$('confirm').onchange=update;
-for(const id of ['url','token','group','datasource'])$(id).addEventListener('input',()=>{
- $('connectionStatus').textContent='连接参数已修改，请重新测试';
- $('connectionStatus').className='help';
+function showDetail(r){
+ if(!r)return;
+ $("detailTitle").textContent=r.name;
+ const problems=r.issues.map(x=>'<div style="margin:8px 0"><span class="tag '+(x.level==="error"?"error":"warn")+'">'+(x.level==="error"?"错误":"警告")+'</span> '+escapeHTML(x.message)+'</div>').join("");
+ $("detailBody").innerHTML='<div class="tag">Excel 第 '+r.row+' 行 · '+escapeHTML(r.group)+' · '+escapeHTML(r.duration)+'</div>'+
+ '<div class="detail-label">校验结果</div><div class="detail-value">'+(problems||'<span class="tag success">无错误或警告</span>')+'</div>'+
+ '<div class="detail-label">原始 PromQL（实际导入）</div><div class="code">'+escapeHTML(r.promql)+'</div>'+
+ '<div class="detail-label">Excel 建议查询（仅供比较，不会写入）</div><div class="code">'+escapeHTML(r.suggested_promql||"未提供")+'</div>'+
+ '<div class="detail-label">原始持续时间 / 建议值</div><div class="detail-value">'+escapeHTML(r.duration)+' / '+escapeHTML(r.suggested_duration||"未提供")+'</div>'+
+ '<div class="detail-label">摘要 / 描述 / 处理建议</div><div class="detail-value">'+escapeHTML([r.summary,r.description,r.suggestion].filter(Boolean).join("\n\n")||"未提供")+'</div>'+
+ '<div class="detail-label">通知与标签前置条件（不自动写入）</div><div class="detail-value">'+escapeHTML([r.notification,r.label_requirements].filter(Boolean).join("\n")||"无")+'</div>';
+ $("detailDialog").showModal();
+}
+$("closeDialog").onclick=()=>$("detailDialog").close();
+$("detailDialog").onclick=e=>{if(e.target===$("detailDialog"))$("detailDialog").close()};
+$("rules").addEventListener("change",e=>{
+ const checkbox=e.target.closest(".pick");if(!checkbox)return;
+ const row=Number(checkbox.dataset.row);
+ if(checkbox.checked)selected.add(row);else selected.delete(row);
+ update();
 });
-$('testConnection').onclick=async()=>{
- const btn=$('testConnection');
- btn.disabled=true;$('connectionStatus').className='help';$('connectionStatus').textContent='正在测试连接...';
- try{
-  const res=await fetch('/api/test-connection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-   url:$('url').value.trim(),token:$('token').value,group_id:Number($('group').value),datasource_id:Number($('datasource').value)
-  })});
-  const result=await res.json();
-  if(!res.ok)throw Error(result.error||'连接测试失败');
-  $('connectionStatus').className='ok';
-  $('connectionStatus').textContent='连接成功：业务组 '+result.group_id+' 可读取 '+result.existing_rules+' 条规则；数据源 ID 尚未独立核验';
- }catch(e){$('connectionStatus').className='bad';$('connectionStatus').textContent='连接失败：'+e.message}
- finally{btn.disabled=false}
+$("rules").addEventListener("click",e=>{
+ const button=e.target.closest("button[data-row]");if(!button)return;
+ const row=Number(button.dataset.row),r=getRule(row);if(!r)return;
+ if(button.classList.contains("detail"))return showDetail(r);
+ if(importing)return;
+ if(button.classList.contains("toggle")){if(paused.has(row))paused.delete(row);else{paused.add(row);selected.delete(row)}}
+ if(button.classList.contains("remove")){removed.add(row);selected.delete(row);paused.delete(row)}
+ render();
+});
+function refilter(){page=1;render()}
+$("search").oninput=refilter;$("filter").onchange=refilter;$("groupFilter").onchange=refilter;
+$("clearFilters").onclick=()=>{$("search").value="";$("filter").value="all";$("groupFilter").value="";refilter()};
+$("pageSize").onchange=refilter;
+$("prevPage").onclick=()=>{page--;render()};
+$("nextPage").onclick=()=>{page++;render()};
+$("all").onclick=()=>{for(const r of filteredRows())if(eligible(r))selected.add(r.row);render()};
+$("none").onclick=()=>{for(const r of filteredRows())selected.delete(r.row);render()};
+$("bulkDisable").onclick=()=>{
+ const rows=filteredSelected();if(!rows.length)return;
+ if(!confirm("禁用当前筛选范围内已勾选的 "+rows.length+" 条候选规则？\n仅排除本次导入，不影响夜莺已有规则。"))return;
+ for(const r of rows){paused.add(r.row);selected.delete(r.row)}render();
 };
-$('preview').onclick=async()=>{
- const f=$('file').files[0];if(!f){alert('请选择 .xlsx');return}
- $('summary').textContent='正在解析...';const fd=new FormData();fd.append('file',f);
- try{
-  const res=await fetch('/api/preview',{method:'POST',body:fd});
-  const p=await res.json();if(!res.ok)throw Error(p.error||'解析失败');
-  preview=p;removed.clear();excluded.clear();selected.clear();for(const r of p.rules)if(valid(r))selected.add(r.row);
-  $('search').value='';$('filter').value='all';
-  $('summary').textContent='已读取 '+p.sheets.length+' 个工作表，解析有效规则 '+p.rules.length+' 条。\\n'+p.workbook_warnings.join('\\n');
-  ['all','none','export'].forEach(id=>$(id).disabled=false);
-  render();
- }catch(e){preview=null;$('summary').textContent='解析失败：'+e.message;render()}
+$("bulkDelete").onclick=()=>{
+ const rows=filteredSelected();if(!rows.length)return;
+ if(!confirm("从当前导入清单删除 "+rows.length+" 条已勾选规则？\n不会删除夜莺已有规则，可点击「恢复删除」撤销。"))return;
+ for(const r of rows){removed.add(r.row);selected.delete(r.row);paused.delete(r.row)}render();
 };
-$('all').onclick=()=>{for(const r of preview?.rules||[])if(!removed.has(r.row)&&!excluded.has(r.row)&&valid(r)&&visible(r))selected.add(r.row);render()};
-$('none').onclick=()=>{for(const r of preview?.rules||[])if(visible(r))selected.delete(r.row);render()};
-function download(name,value){const blob=new Blob([JSON.stringify(value,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-$('export').onclick=()=>download('n9e-preview.json',{...preview,removed_rows:[...removed],disabled_candidate_rows:[...excluded],selected_rows:picks()});
-$('import').onclick=async()=>{
- if(!preview||!$('confirm').checked)return;
+$("bulkEnable").onclick=()=>{
+ for(const r of filteredRows())if(paused.has(r.row)){paused.delete(r.row)}
+ render();
+};
+$("restore").onclick=()=>{if(confirm("恢复本次预览中全部 "+removed.size+" 条已删除规则？")){removed.clear();render()}};
+$("confirm").onchange=update;
+for(const id of ["url","token","group","datasource"])$(id).addEventListener("input",markTestInvalid);
+$("testConnection").onclick=async()=>{
+ const button=$("testConnection");button.disabled=true;$("connectionStatus").className="statusline";$("connectionStatus").textContent="正在验证…";connectionOK=false;update();
+ try{
+  const response=await fetch("/api/test-connection",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:$("url").value.trim(),token:$("token").value,group_id:Number($("group").value),datasource_id:Number($("datasource").value)})});
+  const data=await response.json();if(!response.ok)throw Error(data.error||"测试失败");
+  connectionOK=true;$("connectionStatus").className="statusline success";
+  $("connectionStatus").textContent="连接成功 · 可读取业务组 "+data.group_id+" 的 "+data.existing_rules+" 条规则（数据源 ID 未单独验证）";
+ }catch(e){$("connectionStatus").className="statusline error";$("connectionStatus").textContent="连接失败 · "+e.message}
+ finally{button.disabled=false;update()}
+};
+$("preview").onclick=async()=>{
+ const file=$("file").files[0];if(!file){alert("请选择 .xlsx 文件");return}
+ const button=$("preview");button.disabled=true;
+ $("summary").className="file-info visible";$("summary").textContent="正在解析工作簿…";
+ const form=new FormData();form.append("file",file);
+ try{
+  const response=await fetch("/api/preview",{method:"POST",body:form});
+  const data=await response.json();if(!response.ok)throw Error(data.error||"解析失败");
+  preview=data;selected.clear();removed.clear();paused.clear();
+  for(const r of data.rules)if(isValid(r))selected.add(r.row);
+  $("search").value="";$("filter").value="all";$("groupFilter").innerHTML='<option value="">全部分组</option>';
+  const groups=[...new Set(data.rules.map(r=>r.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-CN"));
+  for(const group of groups){const o=document.createElement("option");o.value=group;o.textContent=group;$("groupFilter").appendChild(o)}
+  const errorCount=data.rules.filter(r=>!isValid(r)).length;
+  $("summary").textContent="✓ "+file.name+" · "+data.sheets.length+" 个 Sheet · "+data.rules.length+" 条有效规则"+(errorCount?" · "+errorCount+" 条有错误":"");
+  $("confirm").checked=false;page=1;render();
+ }catch(e){preview=null;selected.clear();removed.clear();paused.clear();$("summary").textContent="解析失败："+e.message;render()}
+ finally{button.disabled=false;update()}
+};
+function download(name,value){const blob=new Blob([JSON.stringify(value,null,2)],{type:"application/json"}),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),2000)}
+$("export").onclick=()=>{if(preview)download("n9e-preview.json",{...preview,selected_rows:picks(),disabled_candidate_rows:[...paused],removed_rows:[...removed]})};
+$("downloadResult").onclick=()=>{if(lastResult)download("n9e-import-result.json",lastResult)};
+$("import").onclick=async()=>{
+ if(!preview||!connectionOK||!$("confirm").checked||importing)return;
  const rows=picks();
- if(!rows.length||!confirm('确定向业务组提交 '+rows.length+' 条默认禁用规则？'))return;
- $('import').disabled=true;$('result').textContent='正在逐条提交...';
+ if(!rows.length||!confirm("向业务组 "+$("group").value+" 提交 "+rows.length+" 条规则？\n已有同名规则跳过，新建规则默认禁用。"))return;
+ importing=true;render();
+ $("resultCard").classList.add("visible");$("result").textContent="正在逐条导入，请勿关闭页面…";
  try{
-  const res=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-   url:$('url').value,token:$('token').value,group_id:Number($('group').value),datasource_id:Number($('datasource').value),
+  const response=await fetch("/api/import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+   url:$("url").value.trim(),token:$("token").value,group_id:Number($("group").value),datasource_id:Number($("datasource").value),
    preview_id:preview.preview_id,rows,confirm:true
   })});
-  const obj=await res.json();if(!res.ok)throw Error(obj.error||'导入失败');
-  $('result').textContent='API 接受创建：'+obj.created+'，跳过：'+obj.skipped+'，失败：'+obj.failed+'\\n'+obj.items.map(i=>i.status+' | '+i.name+' | '+i.message).join('\\n');
-  download('n9e-import-result.json',obj);
- }catch(e){$('result').textContent='操作中止：'+e.message}finally{update()}
+  const data=await response.json();if(!response.ok)throw Error(data.error||"导入失败");
+  lastResult=data;$("downloadResult").disabled=false;
+  $("result").textContent="API 接受："+data.created+" 条 · 跳过："+data.skipped+" 条 · 失败："+data.failed+" 条\n"+data.items.map(x=>x.status+" | "+x.name+" | "+x.message).join("\n");
+ }catch(e){$("result").textContent="导入中止："+e.message}
+ finally{importing=false;render()}
 };
-</script></body></html>
+render();
+</script>
+</body></html>
