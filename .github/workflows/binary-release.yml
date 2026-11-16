@@ -25,6 +25,9 @@ jobs:
           - platform: macos-arm64
             runner: macos-15
             target: aarch64-apple-darwin
+          - platform: windows-x86_64
+            runner: windows-2022
+            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
@@ -56,7 +59,8 @@ jobs:
       - name: Build release executable
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Verify native architecture
+      - name: Verify Unix executable
+        if: runner.os != 'Windows'
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
@@ -64,8 +68,19 @@ jobs:
           file "target/$TARGET/release/n9e-tools"
           test -x "target/$TARGET/release/n9e-tools"
 
-      - name: Package executable, README, and checksum
-        id: package
+      - name: Verify Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          $exe = "target/$env:TARGET/release/n9e-tools.exe"
+          if (-not (Test-Path $exe -PathType Leaf)) { throw "Missing executable: $exe" }
+          Write-Output "Windows executable: $exe"
+
+      - name: Package Unix executable, README, and checksum
+        if: runner.os != 'Windows'
+        id: package_unix
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
@@ -85,12 +100,34 @@ jobs:
           )
           echo "archive=$name" >> "$GITHUB_OUTPUT"
 
+      - name: Package Windows executable, README, and checksum
+        if: runner.os == 'Windows'
+        id: package_windows
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.platform }}
+          RELEASE_LABEL: ${{ inputs.release_label }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $name = "n9e-tools-$env:RELEASE_LABEL-$env:PLATFORM"
+          $directory = "dist/$name"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          Copy-Item "target/$env:TARGET/release/n9e-tools.exe" "$directory/n9e-tools.exe"
+          Copy-Item README.md "$directory/README.md"
+          $archive = "$name.zip"
+          Compress-Archive -Path $directory -DestinationPath "dist/$archive" -Force
+          $hash = (Get-FileHash -Path "dist/$archive" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $archive" | Set-Content -Path "dist/$archive.sha256" -Encoding ascii
+          "archive=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Upload binary archive
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.archive }}
+          name: n9e-tools-${{ inputs.release_label }}-${{ matrix.platform }}
           path: |
             dist/*.tar.gz
+            dist/*.zip
             dist/*.sha256
           if-no-files-found: error
           retention-days: 30
@@ -106,7 +143,7 @@ jobs:
       group: binary-release-${{ inputs.release_label }}
       cancel-in-progress: false
     steps:
-      - name: Download both platform artifacts
+      - name: Download all platform artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: n9e-tools-${{ inputs.release_label }}-*
@@ -126,7 +163,11 @@ jobs:
             test -s "$archive.sha256"
             shasum -a 256 -c "$archive.sha256"
           done
-          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 2
+          archive="n9e-tools-${RELEASE_LABEL}-windows-x86_64.zip"
+          test -s "$archive"
+          test -s "$archive.sha256"
+          shasum -a 256 -c "$archive.sha256"
+          test "$(find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l)" -eq 3
 
       - name: Fail if release already exists
         shell: bash
@@ -152,14 +193,15 @@ jobs:
           ### Download packages
           - Linux x86_64: n9e-tools-$RELEASE_LABEL-linux-x86_64.tar.gz
           - macOS Apple Silicon (arm64): n9e-tools-$RELEASE_LABEL-macos-arm64.tar.gz
+          - Windows x86_64: n9e-tools-$RELEASE_LABEL-windows-x86_64.zip
 
-          Both packages contain the n9e-tools executable and README.md.
+          All three packages include the executable and README.md (Windows: n9e-tools.exe).
           SHA-256 checksum files are provided for verification.
           Run ./n9e-tools after extraction. Default address: http://127.0.0.1:8088
 
           Source commit: $GITHUB_SHA
           EOF
-          gh release create "$RELEASE_LABEL" release-assets/*.tar.gz release-assets/*.sha256 \
+          gh release create "$RELEASE_LABEL" release-assets/*.tar.gz release-assets/*.zip release-assets/*.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "n9e-tools $RELEASE_LABEL" \
@@ -178,5 +220,5 @@ jobs:
             echo ""
             echo "Release: $url"
             echo ""
-            echo "Assets: Linux x86_64 and macOS arm64 tar.gz plus SHA-256 files."
+            echo "Assets: Linux x86_64 and macOS arm64 tar.gz, Windows x86_64 zip, plus SHA-256 files."
           } >> "$GITHUB_STEP_SUMMARY"
