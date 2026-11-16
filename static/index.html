@@ -32,12 +32,12 @@ details{max-width:490px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-siz
 </main>
 <script>
 let preview=null;
-const removed=new Set(), excluded=new Set();
+const removed=new Set(), excluded=new Set(), selected=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const valid=r=>!r.issues.some(i=>i.level==='error');
 const candidates=()=>preview?preview.rules.filter(r=>!removed.has(r.row)&&!excluded.has(r.row)&&valid(r)):[];
-const picks=()=>Array.from(document.querySelectorAll('.pick:checked')).map(e=>Number(e.value));
+const picks=()=>[...selected].filter(row=>!removed.has(row)&&!excluded.has(row)&&preview?.rules.some(r=>r.row===row&&valid(r)));
 function update(){
  const n=picks().length;
  $('count').textContent='已选择 '+n+' / '+(preview?.rules.length||0)+'；删除 '+removed.size+'；禁用候选 '+excluded.size;
@@ -56,14 +56,11 @@ function visible(r){
  return true;
 }
 function render(){
- if(!preview){$('rules').innerHTML='<tr><td colspan="7">请先上传 Excel</td></tr>';update();return}
- const previouslySelected=new Set(picks());
- // First rendering selects all valid rows; later renders preserve the selection.
- const initial=!render.hasRendered;
+ if(!preview){selected.clear();$('rules').innerHTML='<tr><td colspan="7">请先上传 Excel</td></tr>';update();return}
  const rows=preview.rules.filter(r=>!removed.has(r.row)&&visible(r));
  $('rules').innerHTML=rows.map(r=>{
   const disabled=excluded.has(r.row),hasError=!valid(r);
-  const checked=!disabled&&!hasError&&(initial||previouslySelected.has(r.row));
+  const checked=!disabled&&!hasError&&selected.has(r.row);
   return '<tr><td><input class="pick" type="checkbox" value="'+r.row+'" '+(disabled||hasError?'disabled':'')+' '+(checked?'checked':'')+'></td>'+
    '<td>'+r.row+'</td><td><b>'+esc(r.name)+'</b><br><small>'+esc(r.group)+' / '+esc(r.exporter)+'</small></td>'+
    '<td>'+esc(r.duration)+' ('+r.duration_seconds+'s)</td>'+
@@ -71,16 +68,15 @@ function render(){
    '<td>'+(r.issues.map(x=>'<div class="'+(x.level==='error'?'bad':'warn')+'">'+esc(x.message)+'</div>').join('')||'<span class="ok">通过</span>')+'</td>'+
    '<td><button class="secondary disable-rule" data-row="'+r.row+'">'+(disabled?'启用候选':'禁用候选')+'</button> <button class="secondary remove-rule" data-row="'+r.row+'">删除</button></td></tr>'
  }).join('')||'<tr><td colspan="7">当前条件下没有规则</td></tr>';
- render.hasRendered=true;
- document.querySelectorAll('.pick').forEach(e=>e.onchange=update);
+ document.querySelectorAll('.pick').forEach(e=>e.onchange=()=>{const row=Number(e.value);if(e.checked)selected.add(row);else selected.delete(row);update()});
  document.querySelectorAll('.disable-rule').forEach(b=>b.onclick=()=>{
   const row=Number(b.dataset.row);
-  if(excluded.has(row))excluded.delete(row);else excluded.add(row);
+  if(excluded.has(row)){excluded.delete(row);if(preview.rules.some(r=>r.row===row&&valid(r)))selected.add(row)}else{excluded.add(row);selected.delete(row)}
   // Maintain the visible selected rows on re-render.
   render();
  });
  document.querySelectorAll('.remove-rule').forEach(b=>b.onclick=()=>{
-  removed.add(Number(b.dataset.row));render();
+  const row=Number(b.dataset.row);removed.add(row);selected.delete(row);render();
  });
  update();
 }
@@ -112,15 +108,15 @@ $('preview').onclick=async()=>{
  try{
   const res=await fetch('/api/preview',{method:'POST',body:fd});
   const p=await res.json();if(!res.ok)throw Error(p.error||'解析失败');
-  preview=p;removed.clear();excluded.clear();render.hasRendered=false;
+  preview=p;removed.clear();excluded.clear();selected.clear();for(const r of p.rules)if(valid(r))selected.add(r.row);
   $('search').value='';$('filter').value='all';
   $('summary').textContent='已读取 '+p.sheets.length+' 个工作表，解析有效规则 '+p.rules.length+' 条。\\n'+p.workbook_warnings.join('\\n');
   ['all','none','export'].forEach(id=>$(id).disabled=false);
   render();
  }catch(e){preview=null;$('summary').textContent='解析失败：'+e.message;render()}
 };
-$('all').onclick=()=>{document.querySelectorAll('.pick:not(:disabled)').forEach(e=>e.checked=true);update()};
-$('none').onclick=()=>{document.querySelectorAll('.pick').forEach(e=>e.checked=false);update()};
+$('all').onclick=()=>{for(const r of preview?.rules||[])if(!removed.has(r.row)&&!excluded.has(r.row)&&valid(r)&&visible(r))selected.add(r.row);render()};
+$('none').onclick=()=>{for(const r of preview?.rules||[])if(visible(r))selected.delete(r.row);render()};
 function download(name,value){const blob=new Blob([JSON.stringify(value,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 $('export').onclick=()=>download('n9e-preview.json',{...preview,removed_rows:[...removed],disabled_candidate_rows:[...excluded],selected_rows:picks()});
 $('import').onclick=async()=>{
