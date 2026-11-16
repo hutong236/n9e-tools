@@ -9,6 +9,44 @@ type AppState=Arc<Mutex<HashMap<String,Preview>>>;
 #[derive(Deserialize)]struct ImportRequest { url:String,token:String,group_id:u64,datasource_id:u64,preview_id:String,rows:Vec<u32>,confirm:bool }
 #[derive(Deserialize)]struct TestConnectionRequest { url:String,token:String,group_id:u64,datasource_id:u64 }
 #[derive(Serialize)]struct ConnectionResult { connected:bool, message:String, existing_rules:usize, group_id:u64, datasource_id:u64, datasource_checked:bool }
+
+#[derive(Deserialize)]struct DiscoverRequest { url:String,token:String }
+#[derive(Serialize)]struct OptionItem { id:u64,name:String,kind:String }
+#[derive(Serialize)]struct DiscoverResult {groups:Vec<OptionItem>,datasources:Vec<OptionItem>}
+fn parse_options(value:&Value,category:&str)->Result<Vec<OptionItem>,String>{
+ let arr=extract_list(value)?;
+ let mut out=Vec::new();
+ for item in arr{
+  let id=item.get("id").or_else(||item.get("Id")).and_then(|x|x.as_u64().or_else(||x.as_str().and_then(|v|v.parse::<u64>().ok())));
+  let name=item.get("name").or_else(||item.get("Name")).and_then(Value::as_str);
+  if let (Some(id),Some(name))=(id,name){
+   if id>0&&!name.trim().is_empty(){
+    let kind=item.get("plugin_type").or_else(||item.get("cate")).and_then(Value::as_str).unwrap_or("");
+    out.push(OptionItem{id,name:name.to_string(),kind:if category=="group"{String::new()}else{kind.to_string()}});
+   }
+  }
+ }
+ if !arr.is_empty()&&out.is_empty(){return Err(format!("{category} 数据格式无法识别 ID 与名称"))}
+ out.sort_by(|a,b|a.name.cmp(&b.name));
+ Ok(out)
+}
+async fn discover(Json(req):Json<DiscoverRequest>)->Result<Json<DiscoverResult>,(StatusCode,Json<Value>)>{
+ if req.token.trim().is_empty(){return Err(error(StatusCode::BAD_REQUEST,"请填写 X-User-Token"))}
+ let base=valid_url(&req.url).map_err(|e|error(StatusCode::BAD_REQUEST,e))?;
+ let client=reqwest::Client::builder().timeout(Duration::from_secs(15)).redirect(reqwest::redirect::Policy::none()).build().map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+ let group_uri=format!("{base}/api/n9e/busi-groups");
+ let groups_response=client.get(group_uri).header("X-User-Token",&req.token).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,format!("业务组查询失败：{e}")))?;
+ let groups_json=api_json(groups_response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,format!("业务组接口异常：{e}")))?;
+ let groups=parse_options(&groups_json,"group").map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
+ let datasource_uri=format!("{base}/api/n9e/datasource/list");
+ let ds_response=client.post(datasource_uri).header("X-User-Token",&req.token)
+    .json(&serde_json::json!({"name":"","plugin_type":"","category":""})).send().await
+    .map_err(|e|error(StatusCode::BAD_GATEWAY,format!("数据源查询失败：{e}")))?;
+ let ds_json=api_json(ds_response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,format!("数据源接口异常：{e}")))?;
+ // Only return id/name/type: never forward datasource credentials or settings to browser.
+ let datasources=parse_options(&ds_json,"datasource").map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
+ Ok(Json(DiscoverResult{groups,datasources}))
+}
 #[derive(Serialize)]struct ResultRow{name:String,status:String,message:String}
 #[derive(Serialize)]struct ImportResult{created:usize,skipped:usize,failed:usize,items:Vec<ResultRow>}
 fn error(code:StatusCode,msg:impl Into<String>)->(StatusCode,Json<Value>){(code,Json(serde_json::json!({"error":msg.into()})))}
@@ -116,7 +154,7 @@ async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Res
 #[tokio::main]async fn main(){
  tracing_subscriber::fmt::init();
  let state:AppState=Arc::new(Mutex::new(HashMap::new()));
- let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/import",post(import)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state);
+ let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state);
  let bind=std::env::var("BIND").unwrap_or("127.0.0.1:8088".into());
  let addr:SocketAddr=bind.parse().expect("BIND must be IP:port");
  let listener=tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -146,6 +184,31 @@ mod tests {
 mod http_integration_tests {
  use super::*;
  use excel::{Issue,Rule};
+ #[test]
+ fn parses_discovery_items_without_secrets(){
+  let input=serde_json::json!({"dat":[{"id":8,"name":"vm-prod","plugin_type":"prometheus","auth":{"password":"DO-NOT-EXPOSE"}},{"id":9,"name":"test","plugin_type":"mysql"}],"err":null});
+  let items=parse_options(&input,"datasource").unwrap();
+  assert_eq!(items.len(),2);
+  let serialized=serde_json::to_string(&items).unwrap();
+  assert!(!serialized.contains("DO-NOT-EXPOSE"));
+  assert_eq!(items[1].kind,"prometheus");
+ }
+ #[tokio::test]
+ async fn discovers_groups_and_datasources(){
+  let mock=Router::new()
+   .route("/api/n9e/busi-groups",get(||async{Json(serde_json::json!({"dat":[{"id":2,"name":"Linux生产"}],"err":null}))}))
+   .route("/api/n9e/datasource/list",post(|Json(body):Json<Value>|async move{
+      assert_eq!(body["plugin_type"],"");
+      Json(serde_json::json!({"dat":[{"id":7,"name":"VictoriaMetrics","plugin_type":"prometheus","auth":{"password":"secret"}}],"err":null}))
+   }));
+  let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let addr=listener.local_addr().unwrap();
+  tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
+  let result=discover(Json(DiscoverRequest{url:format!("http://{addr}"),token:"test".into()})).await.unwrap().0;
+  assert_eq!(result.groups[0].id,2);
+  assert_eq!(result.datasources[0].id,7);
+  assert_eq!(result.datasources[0].kind,"prometheus");
+ }
  #[tokio::test]
  async fn test_connection_validates_accessible_group() {
   let mock=Router::new().route("/api/n9e/busi-group/2/alert-rules",
