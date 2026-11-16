@@ -41,7 +41,7 @@ dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px))
 </head>
 <body>
 <main class="shell">
-<header class="topbar"><div class="brand"><span class="logo">N</span><div><h1>告警规则批量导入</h1><p class="subtitle">Nightingale v8 · Excel 导入助手 · 预览确认后才写入</p></div></div><span class="version">v0.5.0</span></header>
+<header class="topbar"><div class="brand"><span class="logo">N</span><div><h1>告警规则批量导入</h1><p class="subtitle">Nightingale v8 · Excel 导入助手 · 预览确认后才写入</p></div></div><span class="version">v0.6.0</span></header>
 <nav class="steps" aria-label="导入流程"><div class="step"><span class="stepnum current">1</span>解析 Excel</div><span class="chevron">›</span><div class="step"><span class="stepnum current">2</span>连接夜莺</div><span class="chevron">›</span><div class="step"><span class="stepnum current">3</span>筛选规则</div><span class="chevron">›</span><div class="step"><span class="stepnum current">4</span>确认导入</div></nav>
 <div class="grid-top">
 <section class="card"><div class="card-inner">
@@ -179,6 +179,7 @@ function update(){
  $("import").textContent=importing?"正在导入…":"导入选中规则（"+count+"）";
  $("preview").disabled=importing;
  $("testConnection").disabled=importing;
+ for(const id of ["file","url","token","group","datasource","confirm"])$(id).disabled=importing;
 }
 function render(){
  if(!preview){$("rules").innerHTML='<tr><td class="empty" colspan="7">上传 Excel 后在此预览全部规则</td></tr>';update();return}
@@ -357,9 +358,9 @@ function importEvent(event){
   const item=event.item;
   importJob.items.push({row:Number(item.row)||0,name:String(item.name||""),status:String(item.status||"failed"),message:String(item.message||"")});
   importJob.processed=importJob.items.length;
-  importJob.created=importJob.items.filter(x=>x.status==="created").length;
-  importJob.skipped=importJob.items.filter(x=>x.status==="skipped").length;
-  importJob.failed=importJob.processed-importJob.created-importJob.skipped;
+  if(item.status==="created")importJob.created++;
+  else if(item.status==="skipped")importJob.skipped++;
+  else importJob.failed++;
   importJob.current="已处理 "+importJob.processed+" 条，正在等待下一条结果…";
  }else if(event.type==="complete"){
   importJob.phase="complete";importJob.current="所有规则处理结束";
