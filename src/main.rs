@@ -323,9 +323,30 @@ mod http_integration_tests {
    url:format!("http://{addr}"),token:"test-token".into(),group_id:1,datasource_id:3,
    preview_id:"fixture".into(),rows:vec![5,6],confirm:true
   };
-  let result=import(State(state),Json(request)).await.unwrap().0;
+  let result=import(State(state.clone()),Json(request.clone())).await.unwrap().0;
   assert_eq!(result.created,1);
   assert_eq!(result.skipped,1);
   assert_eq!(result.failed,0);
+  assert_eq!(result.items[0].row,5);
+  assert_eq!(result.items[1].row,6);
+  // Streaming and JSON endpoints must share the same import logic.
+  let (tx,mut rx)=tokio::sync::mpsc::channel::<Bytes>(16);
+  let streamed=import_core(state,request,Some(tx)).await.unwrap();
+  assert_eq!(streamed.created,1);
+  assert_eq!(streamed.skipped,1);
+  let mut events=Vec::<Value>::new();
+  while let Some(chunk)=rx.recv().await {
+   let event:Value=serde_json::from_slice(chunk.strip_suffix(b"\n").unwrap_or(&chunk)).unwrap();
+   events.push(event);
+  }
+  assert_eq!(events.len(),6); // started, current/item x2, complete
+  assert_eq!(events[0]["type"],"started");
+  assert_eq!(events[0]["total"],2);
+  assert_eq!(events[1]["type"],"current");
+  assert_eq!(events[2]["type"],"item");
+  assert_eq!(events[2]["item"]["status"],"skipped");
+  assert_eq!(events[4]["item"]["row"],6);
+  assert_eq!(events[5]["type"],"complete");
+  assert_eq!(events[5]["created"],1);
  }
 }
