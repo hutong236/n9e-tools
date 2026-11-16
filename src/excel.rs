@@ -105,3 +105,56 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  #[test]fn durations(){assert_eq!(seconds("1m"),Some(60));assert_eq!(seconds("2 分钟"),Some(120));assert_eq!(seconds(""),None);assert_eq!(seconds("0m"),Some(0));}
  #[test]fn red(){assert!(is_red("FFFF0000"));assert!(!is_red("FFD6E4F0"));}
 }
+
+#[cfg(test)]
+mod integration_tests {
+ use super::*;
+ use std::io::{Cursor,Write};
+ use zip::write::SimpleFileOptions;
+
+ #[test]
+ fn parses_full_red_selection_and_preserves_zero_duration() {
+  let sheets=["说明","严重告警清单","规则配置明细","告警参数配置","告警参数规范","采集侧标签配置","告警侧派生标签","host_ip 可派生性","通知路由配置","消息模板","待确认事项"];
+  let xml_header=r#"<?xml version="1.0" encoding="UTF-8"?>"#;
+  let mut out=Cursor::new(Vec::<u8>::new());
+  {
+   let mut z=zip::ZipWriter::new(&mut out);
+   let opts=SimpleFileOptions::default();
+   z.start_file("xl/workbook.xml",opts).unwrap();
+   write!(z,"{}<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheets>",xml_header).unwrap();
+   for (i,name) in sheets.iter().enumerate(){write!(z,"<sheet name=\"{}\" sheetId=\"{}\"/>",name,i+1).unwrap();}
+   write!(z,"</sheets></workbook>").unwrap();
+   z.start_file("xl/styles.xml",opts).unwrap();
+   write!(z,"{}<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fills count=\"2\"><fill/><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFF0000\"/></patternFill></fill></fills><cellXfs count=\"2\"><xf fillId=\"0\"/><xf fillId=\"1\"/></cellXfs></styleSheet>",xml_header).unwrap();
+   for idx in 1..=11 {
+    z.start_file(format!("xl/worksheets/sheet{idx}.xml"),opts).unwrap();
+    write!(z,"{}<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>",xml_header).unwrap();
+    if idx==2||idx==3||idx==4 {
+     for i in 0..104 {
+      let row=i+5;let name=format!("synthetic-{i}");
+      write!(z,"<row r=\"{row}\">").unwrap();
+      if idx==2 {
+       write!(z,"<c r=\"E{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"I{row}\" t=\"inlineStr\"><is><t>{}</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
+      }else if idx==3 {
+       let style=if i<54 {1}else{0};
+       write!(z,"<c r=\"A{row}\" s=\"{style}\"><v>{}</v></c><c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"H{row}\" t=\"inlineStr\"><is><t>vector(1) > 0</t></is></c>",i+1).unwrap();
+      }else{
+       write!(z,"<c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"G{row}\" t=\"inlineStr\"><is><t>{}</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
+      }
+      write!(z,"</row>").unwrap();
+     }
+    }
+    write!(z,"</sheetData></worksheet>").unwrap();
+   }
+   z.finish().unwrap();
+  }
+  let preview=parse(&out.into_inner()).unwrap();
+  assert_eq!(preview.sheets.len(),11);
+  assert_eq!(preview.all_rules,104);
+  assert_eq!(preview.selected,54);
+  assert_eq!(preview.rules.len(),54);
+  assert_eq!(preview.rules.iter().filter(|r|r.duration_seconds==0).count(),11);
+  assert_eq!(preview.rules[0].promql,"vector(1) > 0");
+  assert_eq!(preview.rules[53].row,58);
+ }
+}
