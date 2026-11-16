@@ -147,6 +147,37 @@ mod http_integration_tests {
  use super::*;
  use excel::{Issue,Rule};
  #[tokio::test]
+ async fn test_connection_validates_accessible_group() {
+  let mock=Router::new().route("/api/n9e/busi-group/2/alert-rules",
+   get(|headers:axum::http::HeaderMap| async move {
+    assert_eq!(headers.get("X-User-Token").and_then(|v|v.to_str().ok()),Some("test-token"));
+    Json(serde_json::json!({"err":null,"dat":[{"name":"rule-a"},{"name":"rule-b"}]}))
+   }));
+  let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let addr=listener.local_addr().unwrap();
+  tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
+  let request=TestConnectionRequest{
+    url:format!("http://{addr}"),token:"test-token".into(),group_id:2,datasource_id:7
+  };
+  let result=test_connection(Json(request)).await.unwrap().0;
+  assert!(result.connected);
+  assert_eq!(result.existing_rules,2);
+  assert_eq!(result.group_id,2);
+  assert!(!result.datasource_checked);
+ }
+ #[tokio::test]
+ async fn test_connection_rejects_invalid_token() {
+  let mock=Router::new().route("/api/n9e/busi-group/2/alert-rules",
+   get(||async{Json(serde_json::json!({"err":"unauthorized","dat":null}))}));
+  let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let addr=listener.local_addr().unwrap();
+  tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
+  let request=TestConnectionRequest{
+    url:format!("http://{addr}"),token:"wrong".into(),group_id:2,datasource_id:7
+  };
+  assert!(test_connection(Json(request)).await.is_err());
+ }
+ #[tokio::test]
  async fn import_uses_array_payload_disables_rules_and_skips_existing() {
   let mock=Router::new().route("/api/n9e/busi-group/1/alert-rules",
    get(||async{Json(serde_json::json!({"dat":[{"name":"already"}],"err":null}))})
