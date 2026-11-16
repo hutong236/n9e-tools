@@ -43,6 +43,14 @@ fn check_api(v:&Value)->Result<(),String>{
  if let Some(c)=v.get("code").and_then(Value::as_i64){if c!=0&&c!=200{return Err(format!("API code={c}"))}}
  Ok(())
 }
+fn creation_result(v:&Value,name:&str)->Result<(),String>{
+ let d=v.get("dat").or_else(||v.get("data")).ok_or("创建接口缺少 dat，无法确认写入结果")?;
+ match d.get(name).and_then(Value::as_str){
+  Some("")=>Ok(()),
+  Some(msg)=>Err(format!("夜莺拒绝规则：{msg}")),
+  None=>Err("创建接口未返回该规则的处理结果".into())
+ }
+}
 async fn api_json(resp:reqwest::Response)->Result<Value,String>{
  let status=resp.status();let ct=resp.headers().get(reqwest::header::CONTENT_TYPE).and_then(|x|x.to_str().ok()).unwrap_or("").to_string();
  if !status.is_success(){return Err(format!("HTTP {status}"))}
@@ -88,7 +96,7 @@ async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Res
    "notify_repeat_step":0,"notify_max_number":0,"recover_duration":0
   });
   let res=client.post(&uri).header("X-User-Token",&req.token).json(&vec![payload]).send().await;
-  let outcome=match res{Ok(response)=>api_json(response).await.and_then(|v|{let d=v.get("dat").or_else(||v.get("data")).ok_or("创建接口缺少 dat，无法确认写入结果")?;match d.get(&r.name).and_then(Value::as_str){Some("")=>Ok(()),Some(msg)=>Err(format!("夜莺拒绝规则：{msg}")),None=>Err("创建接口未返回该规则的处理结果".into())}}),Err(e)=>Err(e.to_string())};
+  let outcome=match res{Ok(response)=>api_json(response).await.and_then(|v|creation_result(&v,&r.name)),Err(e)=>Err(e.to_string())};
   match outcome{Ok(())=>{results.created+=1;names.insert(r.name.clone());results.items.push(ResultRow{name:r.name.clone(),status:"created".into(),message:"API已接受创建请求（默认禁用）".into()})},Err(e)=>{results.failed+=1;results.items.push(ResultRow{name:r.name.clone(),status:"failed".into(),message:e})}}
  }
  Ok(Json(results))
@@ -102,4 +110,21 @@ async fn import(State(state):State<AppState>,Json(req):Json<ImportRequest>)->Res
  let listener=tokio::net::TcpListener::bind(addr).await.unwrap();
  println!("Web http://{addr}");
  axum::serve(listener,app).await.unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+ use super::*;
+ #[test]
+ fn nightingale_result_map() {
+  assert!(creation_result(&serde_json::json!({"dat":{"example":""},"err":null}),"example").is_ok());
+  assert!(creation_result(&serde_json::json!({"dat":{"example":"rule already exists"}}),"example").is_err());
+  assert!(creation_result(&serde_json::json!({"dat":{}}),"example").is_err());
+ }
+ #[test]
+ fn existing_rule_list_shapes(){
+  assert_eq!(extract_list(&serde_json::json!({"dat":[{"name":"a"}]})).unwrap().len(),1);
+  assert_eq!(extract_list(&serde_json::json!({"dat":{"list":[{"name":"a"}],"total":1}})).unwrap().len(),1);
+  assert!(extract_list(&serde_json::json!({"dat":null})).is_err());
+ }
 }
