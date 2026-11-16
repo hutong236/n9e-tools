@@ -116,18 +116,19 @@ docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.5.0
 - 连接测试成功后方可点击导入；变更 URL/Token/业务组/数据源会要求重新测试。测试结果暂不确认数据源 ID 的有效性。
 - 当前尚未在用户的 Nightingale 实例执行实际写入验收；建议先在测试业务组导入少量禁用规则。
 
-## GitHub Actions：手工打包 Linux x86 和 Mac ARM 二进制程序
+## GitHub Actions：手工打包 Linux、macOS 与 Windows 二进制程序
 
 在 [Actions → Build downloadable binaries](https://github.com/hutong236/n9e-tools/actions/workflows/binary-release.yml) 中点击 **Run workflow**，选择 `main`，输入包名标签（默认 `v0.5.0`）。
 
-此任务与 Docker 镜像工作流相互独立，不会自动推送镜像。两个平台均成功编译和通过测试后，工作流将**自动创建新的 GitHub Release**，并上传两个压缩包及对应的 SHA-256 校验文件。两台 GitHub Runner 分别原生编译：
+此任务与 Docker 镜像工作流相互独立，不会自动推送镜像。三个平台均成功编译和通过测试后，工作流将**自动创建新的 GitHub Release**，并上传三个压缩包及对应的 SHA-256 校验文件。三台 GitHub Runner 分别原生编译：
 
 | 平台 | Runner | Rust target | 结果 |
 | --- | --- | --- | --- |
 | Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `n9e-tools-v0.5.0-linux-x86_64.tar.gz` |
 | macOS Apple Silicon | `macos-15`（ARM64） | `aarch64-apple-darwin` | `n9e-tools-v0.5.0-macos-arm64.tar.gz` |
+| Windows x86_64（64 位） | `windows-2022` | `x86_64-pc-windows-msvc` | `n9e-tools-v0.5.0-windows-x86_64.zip` |
 
-运行成功后，打开 [GitHub Releases](https://github.com/hutong236/n9e-tools/releases)，找到本次输入的版本号，直接下载对应平台的压缩包和 SHA-256 文件。构建过程也会把产物保留在 Actions Artifacts 中（30 天）。每个平台包含可执行程序 `n9e-tools` 和 README。构建会执行 Rust 测试，并通过 `file` 命令检查二进制文件。
+运行成功后，打开 [GitHub Releases](https://github.com/hutong236/n9e-tools/releases)，找到本次输入的版本号，直接下载对应平台的压缩包和 SHA-256 文件。构建过程也会把产物保留在 Actions Artifacts 中（30 天）。每个平台包含可执行程序（Windows 为 `n9e-tools.exe`）和 README。构建会执行 Rust 测试，并通过 `file` 命令检查二进制文件。
 
 Linux 安装示例：
 
@@ -155,11 +156,11 @@ chmod +x n9e-tools
 
 工作流位置：`.github/workflows/binary-release.yml`。手工点击 Run workflow，输入新版本号（例如 `v0.4.1`），按顺序执行：
 
-1. Linux x86_64 与 macOS ARM64 **并行构建、运行测试**。
-2. 上传每个平台的 `.tar.gz` 和 `.sha256` 到工作流 Artifacts。
-3. 构建全部成功后，下载两个平台的产物，**验证 SHA-256**。
+1. Linux x86_64、macOS ARM64、Windows x86_64 **并行构建、运行测试**。
+2. 上传 Unix 平台的 `.tar.gz`、Windows 的 `.zip` 及各自 `.sha256` 到工作流 Artifacts。
+3. 三个平台构建全部成功后，下载三个平台的产物，**验证 SHA-256**。
 4. 检查版本号未发布，使用 GitHub CLI 创建对应 Git tag 和 GitHub Release。
-5. 在该 Release 中上传两个二进制压缩包与两个校验文件。
+5. 在该 Release 中上传三个二进制压缩包与三个校验文件。
 
 Release 地址示例：`https://github.com/hutong236/n9e-tools/releases/tag/v0.4.1`。
 
@@ -174,3 +175,14 @@ Release 地址示例：`https://github.com/hutong236/n9e-tools/releases/tag/v0.4
 若取消弹窗，两个 ID 不会回填，不能执行导入。修改 URL 或 Token 后会清除之前的目标选择，必须重新测试。
 
 **API：** `POST /api/discover`，body 为 `{"url":"https://n9e.example.internal","token":"YOUR_TOKEN"}`。响应格式：`{"groups":[{"id":1,"name":"业务组","kind":""}],"datasources":[{"id":2,"name":"VictoriaMetrics","kind":"prometheus"}]}`。
+
+### Windows x86_64 运行方法
+
+从对应 [GitHub Release](https://github.com/hutong236/n9e-tools/releases) 下载 `n9e-tools-v0.5.0-windows-x86_64.zip`，解压后在 PowerShell 中执行：
+
+```powershell
+cd .\\n9e-tools-v0.5.0-windows-x86_64
+.\\n9e-tools.exe
+```
+
+在 Windows 浏览器访问 `http://127.0.0.1:8088`。如果 Windows Defender 防火墙弹出提示，应根据实际内网使用场景配置访问范围。Windows 发布包采用 MSVC 64 位目标（不是 32 位 x86）。
