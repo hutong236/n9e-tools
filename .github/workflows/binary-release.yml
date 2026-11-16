@@ -118,7 +118,9 @@ jobs:
           $archive = "$name.zip"
           Compress-Archive -Path $directory -DestinationPath "dist/$archive" -Force
           $hash = (Get-FileHash -Path "dist/$archive" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $archive" | Set-Content -Path "dist/$archive.sha256" -Encoding ascii
+          # Write LF-only checksum text so Linux shasum does not treat CR as part of the ZIP filename.
+          $checksumPath = Join-Path (Resolve-Path "dist").Path "$archive.sha256"
+          [System.IO.File]::WriteAllText($checksumPath, "$hash  $archive`n", [System.Text.UTF8Encoding]::new($false))
           "archive=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload binary archive
@@ -166,6 +168,8 @@ jobs:
           archive="n9e-tools-${RELEASE_LABEL}-windows-x86_64.zip"
           test -s "$archive"
           test -s "$archive.sha256"
+          # Tolerate CRLF in checksum files from older Windows workflow runs.
+          sed -i 's/\r$//' "$archive.sha256"
           shasum -a 256 -c "$archive.sha256"
           test "$(find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l)" -eq 3
 
