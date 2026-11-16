@@ -7,9 +7,9 @@ Rust + Axum 独立 Web 工具，适配 **《夜莺告警配置表格（严重告
 - **不按颜色筛选**：读取「规则配置明细」中的全部有效规则（已上传模板共 **104 条**），保留 11 Sheet 数据关联；不要求 A 列标红。
 - 按规则名称关联「规则配置明细」、「告警参数配置」、「严重告警清单」；检查其余 8 张 Sheet 存在，提示通知/采集前置条件。当前未将其余 8 张 Sheet 所有字段自动转换成告警配置。
 - PromQL 采用「规则配置明细」H 列**原始表达式**；for 采用「告警参数配置」G 列**原始时长**。包含 `0m` 的合法规则不会被误判。
-- 告警级别 S1；目标 Nightingale 业务组 ID 与数据源 ID 在界面填写，不自动按 Excel 中的 exporter 分组猜测。
+- 告警级别 S1；用户只需填写 Nightingale URL 和 X-User-Token，点击「测试连接并选择」打开弹窗，选择业务组和数据源后自动回填 ID。不会按 Excel 中的 exporter 分组猜测。
 - 同业务组**同名跳过**、只创建 `disabled=1` 规则、不自动绑定消息模板、接收组或通知路由。
-- Excel → 全量解析 → 搜索 / 校验过滤 → 逐条勾选 / 禁用候选 / 删除候选 → 确认 → API 创建 → 逐条 JSON 结果。\n- 禁用候选和删除候选只作用于本次**浏览器端待导入列表**，不修改已存在的夜莺规则；导入创建依然默认 `disabled=1`。\n- 夜莺连接测试按钮通过实际 GET 业务组告警规则 API 检查 URL、Token、业务组访问权限；**暂不独立验证数据源 ID**。
+- Excel → 全量解析 → 搜索 / 校验过滤 → 逐条勾选 / 禁用候选 / 删除候选 → 确认 → API 创建 → 逐条 JSON 结果。\n- 禁用候选和删除候选只作用于本次**浏览器端待导入列表**，不修改已存在的夜莺规则；导入创建依然默认 `disabled=1`。\n- 夜莺连接测试通过 API 读取可访问的业务组和数据源，用户在弹窗中选定后才能执行导入。
 
 ## 快速开始
 
@@ -26,8 +26,8 @@ cargo run --release
 ## Docker 启动
 
 ```bash
-docker build -t n9e-tools:0.4 .
-docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.4
+docker build -t n9e-tools:0.5 .
+docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.5
 ```
 
 Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，对远程操作使用受控代理或 VPN。项目的 Web 接口当前没有独立登录功能。
@@ -75,13 +75,13 @@ cargo build --release
 
 进入仓库的 [Actions → Build multi-platform Docker image](https://github.com/hutong236/n9e-tools/actions/workflows/docker-multiarch.yml)，点击 **Run workflow**，选择 `main` 分支并设置：
 
-- `tag`：镜像版本标签，例如 `v0.4.0`（必填，默认 `v0.4.0`）。
+- `tag`：镜像版本标签，例如 `v0.5.0`（必填，默认 `v0.5.0`）。
 - `push_latest`：是否同时覆盖推送 `latest`（默认关闭，发布正式稳定版时才建议勾选）。
 
 工作流使用 Docker Buildx + QEMU，在 GitHub 托管的 Ubuntu Runner 上构建 **linux/amd64** 和 **linux/arm64**，并将统一的多架构 manifest 推送到 GitHub Container Registry：
 
 ```text
-ghcr.io/hutong236/n9e-tools:v0.4.0
+ghcr.io/hutong236/n9e-tools:v0.5.0
 ```
 
 无需额外提供 GHCR 密码。工作流通过 `secrets.GITHUB_TOKEN` 登录，具备 `packages: write` 最小权限。首次发布的 GHCR Package 可见性可能默认为 Private；若需要匿名拉取，请到 GitHub 的 Package Settings 设置为 Public。
@@ -89,16 +89,16 @@ ghcr.io/hutong236/n9e-tools:v0.4.0
 ### 拉取和部署
 
 ```bash
-docker pull ghcr.io/hutong236/n9e-tools:v0.4.0
+docker pull ghcr.io/hutong236/n9e-tools:v0.5.0
 
 docker run --rm -p 127.0.0.1:8088:8088 \
-  ghcr.io/hutong236/n9e-tools:v0.4.0
+  ghcr.io/hutong236/n9e-tools:v0.5.0
 ```
 
 Docker 会按宿主机架构自动选择 amd64 或 arm64 镜像。可以使用：
 
 ```bash
-docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.4.0
+docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.5.0
 ```
 
 检查 manifest 中是否包含两个目标平台。
@@ -118,22 +118,22 @@ docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.4.0
 
 ## GitHub Actions：手工打包 Linux x86 和 Mac ARM 二进制程序
 
-在 [Actions → Build downloadable binaries](https://github.com/hutong236/n9e-tools/actions/workflows/binary-release.yml) 中点击 **Run workflow**，选择 `main`，输入包名标签（默认 `v0.4.0`）。
+在 [Actions → Build downloadable binaries](https://github.com/hutong236/n9e-tools/actions/workflows/binary-release.yml) 中点击 **Run workflow**，选择 `main`，输入包名标签（默认 `v0.5.0`）。
 
 此任务与 Docker 镜像工作流相互独立，不会自动推送镜像。两个平台均成功编译和通过测试后，工作流将**自动创建新的 GitHub Release**，并上传两个压缩包及对应的 SHA-256 校验文件。两台 GitHub Runner 分别原生编译：
 
 | 平台 | Runner | Rust target | 结果 |
 | --- | --- | --- | --- |
-| Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `n9e-tools-v0.4.0-linux-x86_64.tar.gz` |
-| macOS Apple Silicon | `macos-15`（ARM64） | `aarch64-apple-darwin` | `n9e-tools-v0.4.0-macos-arm64.tar.gz` |
+| Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `n9e-tools-v0.5.0-linux-x86_64.tar.gz` |
+| macOS Apple Silicon | `macos-15`（ARM64） | `aarch64-apple-darwin` | `n9e-tools-v0.5.0-macos-arm64.tar.gz` |
 
 运行成功后，打开 [GitHub Releases](https://github.com/hutong236/n9e-tools/releases)，找到本次输入的版本号，直接下载对应平台的压缩包和 SHA-256 文件。构建过程也会把产物保留在 Actions Artifacts 中（30 天）。每个平台包含可执行程序 `n9e-tools` 和 README。构建会执行 Rust 测试，并通过 `file` 命令检查二进制文件。
 
 Linux 安装示例：
 
 ```bash
-tar -xzf n9e-tools-v0.4.0-linux-x86_64.tar.gz
-cd n9e-tools-v0.4.0-linux-x86_64
+tar -xzf n9e-tools-v0.5.0-linux-x86_64.tar.gz
+cd n9e-tools-v0.5.0-linux-x86_64
 chmod +x n9e-tools
 ./n9e-tools
 ```
@@ -141,8 +141,8 @@ chmod +x n9e-tools
 macOS Apple Silicon 安装示例：
 
 ```bash
-tar -xzf n9e-tools-v0.4.0-macos-arm64.tar.gz
-cd n9e-tools-v0.4.0-macos-arm64
+tar -xzf n9e-tools-v0.5.0-macos-arm64.tar.gz
+cd n9e-tools-v0.5.0-macos-arm64
 chmod +x n9e-tools
 ./n9e-tools
 ```
@@ -164,3 +164,13 @@ chmod +x n9e-tools
 Release 地址示例：`https://github.com/hutong236/n9e-tools/releases/tag/v0.4.1`。
 
 注意：如果原版本号已创建 Release，请手工触发时输入新的版本号；不要重复发布相同标签。
+
+## V0.5.0：夜莺资源自动发现与回填
+
+连接步骤：输入 **Nightingale 地址**、**X-User-Token**，点击「测试连接并选择」，工具会调用 `GET /api/n9e/busi-groups` 和 `POST /api/n9e/datasource/list`（请求体 `{"name":"","plugin_type":"","category":""}`），返回当前 Token 可访问的业务组和数据源列表。弹窗允许搜索、选择业务组和数据源；确认后将其真实 ID 自动写入只读字段，避免人为抄错。
+
+服务端只返回资源 ID、名称及数据源类型，不会向浏览器转发 Nightingale 返回的敏感数据源连接字段。连接失败时按业务组请求、数据源请求分别提示错误。仅测试接口成功并不证明具备创建告警规则的权限；需要实际执行一次禁用规则导入才能确认写权限。
+
+若取消弹窗，两个 ID 不会回填，不能执行导入。修改 URL 或 Token 后会清除之前的目标选择，必须重新测试。
+
+**API：** `POST /api/discover`，body 为 `{"url":"https://n9e.example.internal","token":"YOUR_TOKEN"}`。响应格式：`{"groups":[{"id":1,"name":"业务组","kind":""}],"datasources":[{"id":2,"name":"VictoriaMetrics","kind":"prometheus"}]}`。
