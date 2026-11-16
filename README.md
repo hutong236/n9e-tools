@@ -70,3 +70,38 @@ cargo build --release
 ```
 
 预览第一步可不提供 Nightingale 连接信息；实际导入前请使用测试业务组进行 1 条禁用规则试运行。不要把原始 Excel 当作可以直接激活的生产告警配置。
+
+## 手动触发 GitHub Actions 多平台 Docker 镜像构建
+
+进入仓库的 [Actions → Build multi-platform Docker image](https://github.com/hutong236/n9e-tools/actions/workflows/docker-multiarch.yml)，点击 **Run workflow**，选择 `main` 分支并设置：
+
+- `tag`：镜像版本标签，例如 `v0.2.0`（必填，默认 `v0.2.0`）。
+- `push_latest`：是否同时覆盖推送 `latest`（默认关闭，发布正式稳定版时才建议勾选）。
+
+工作流使用 Docker Buildx + QEMU，在 GitHub 托管的 Ubuntu Runner 上构建 **linux/amd64** 和 **linux/arm64**，并将统一的多架构 manifest 推送到 GitHub Container Registry：
+
+```text
+ghcr.io/hutong236/n9e-tools:v0.2.0
+```
+
+无需额外提供 GHCR 密码。工作流通过 `secrets.GITHUB_TOKEN` 登录，具备 `packages: write` 最小权限。首次发布的 GHCR Package 可见性可能默认为 Private；若需要匿名拉取，请到 GitHub 的 Package Settings 设置为 Public。
+
+### 拉取和部署
+
+```bash
+docker pull ghcr.io/hutong236/n9e-tools:v0.2.0
+
+docker run --rm -p 127.0.0.1:8088:8088 \
+  ghcr.io/hutong236/n9e-tools:v0.2.0
+```
+
+Docker 会按宿主机架构自动选择 amd64 或 arm64 镜像。可以使用：
+
+```bash
+docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.2.0
+```
+
+检查 manifest 中是否包含两个目标平台。
+
+**安全提醒：** 此 Web 工具目前没有独立登录鉴权，不要将 8088 端口直接暴露公网；建议仅通过 VPN / SSH 隧道访问。工作流只在人工点击 **Run workflow** 时发布镜像；已有 Rust CI 仍按 push/PR 触发。
+
