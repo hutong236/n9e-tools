@@ -19,12 +19,12 @@ details{max-width:490px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-siz
 </style>
 </head>
 <body><main>
-<header><div><h1>夜莺 v8 告警规则批量导入</h1><div class="help">Rust + Axum · 特定 11 Sheet Excel 模板</div></div><span class="badge">仅红色 54 条 · 原始 PromQL · 同名跳过 · 默认禁用</span></header>
+<header><div><h1>夜莺 v8 告警规则批量导入</h1><div class="help">Rust + Axum · 特定 11 Sheet Excel 模板</div></div><span class="badge">全部有效规则 · 原始 PromQL · 同名跳过 · 默认禁用</span></header>
 <section class="card"><h2>① 上传 Excel 并解析</h2><div class="row"><div class="field"><label>文件（.xlsx）</label><input type="file" id="file" accept=".xlsx"></div><button id="preview">解析 / 校验 / 预览</button></div><div id="summary">尚未上传文件</div></section>
-<section class="card"><h2>② Nightingale 连接</h2><div class="row"><div class="field"><label>夜莺 URL</label><input id="url" placeholder="https://n9e.internal"></div><div class="field"><label>X-User-Token</label><input type="password" id="token" autocomplete="off"></div><div class="field"><label>业务组 ID</label><input type="number" min="1" id="group"></div><div class="field"><label>数据源 ID</label><input type="number" min="1" id="datasource"></div></div><p class="help">请从夜莺界面确认目标业务组和数据源 ID。导入工具不会自动建立通知路由、接收组或采集侧标签。请在可信内网使用。</p></section>
+<section class="card"><h2>② Nightingale 连接</h2><div class="row"><div class="field"><label>夜莺 URL</label><input id="url" placeholder="https://n9e.internal"></div><div class="field"><label>X-User-Token</label><input type="password" id="token" autocomplete="off"></div><div class="field"><label>业务组 ID</label><input type="number" min="1" id="group"></div><div class="field"><label>数据源 ID</label><input type="number" min="1" id="datasource"></div></div><div class="row" style="margin-top:12px"><button type="button" id="testConnection" class="secondary">测试 Nightingale 连接</button><span id="connectionStatus" role="status" aria-live="polite" class="help">尚未测试</span></div><p class="help">请从夜莺界面确认目标业务组和数据源 ID。导入工具不会自动建立通知路由、接收组或采集侧标签。请在可信内网使用。</p></section>
 <section class="card"><div class="row" style="justify-content:space-between"><h2>③ 校验及逐条勾选 <span class="badge" id="count">0 条</span></h2><div class="row"><button class="secondary" id="all" disabled>全选可导入</button><button class="secondary" id="none" disabled>清空</button><button class="secondary" id="export" disabled>下载预览 JSON</button></div></div>
-<div class="tablebox"><table><thead><tr><th>选择</th><th>Excel 行</th><th>名称 / 分组</th><th>原始持续时间</th><th>原始 PromQL</th><th>校验信息</th></tr></thead><tbody id="rules"><tr><td colspan="6">请先上传</td></tr></tbody></table></div>
-<p class="help">错误规则自动禁止选择；警告规则必须由操作者确认后才能写入。保留原始 0m（0 秒）持续时间，不替换为建议值。</p>
+<div class="row" style="margin-bottom:12px"><div class="field"><label for="search">搜索规则名、分组或 PromQL</label><input id="search" placeholder="输入关键词过滤"></div><div class="field"><label for="filter">校验过滤</label><select id="filter"><option value="all">全部</option><option value="error">仅错误</option><option value="warning">仅警告</option><option value="valid">校验通过</option><option value="active">仅待导入</option><option value="disabled">已禁用的候选</option></select></div><button class="secondary" id="restore" disabled>恢复删除的行</button></div><div class="tablebox"><table><thead><tr><th>选择</th><th>Excel 行</th><th>名称 / 分组</th><th>原始持续时间</th><th>原始 PromQL</th><th>校验信息</th><th>操作（仅本次导入）</th></tr></thead><tbody id="rules"><tr><td colspan="7">请先上传</td></tr></tbody></table></div>
+<p class="help">“禁用”会将该候选从本次导入选择中排除，“删除”仅从本次预览清单移除，不会操作夜莺现有规则。错误规则自动禁止选择；警告规则必须由操作者确认后才能写入。保留原始 0m（0 秒）持续时间，不替换为建议值。</p>
 </section>
 <section class="card"><h2>④ 执行禁用规则导入</h2><label><input type="checkbox" id="confirm"> 我已核对目标业务组、数据源、原始表达式与警告，确认创建的规则将保持禁用</label>
 <p><button id="import" disabled>确认导入（同名跳过）</button></p><div id="result"></div></section>
@@ -32,42 +32,110 @@ details{max-width:490px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-siz
 </main>
 <script>
 let preview=null;
+const removed=new Set(), excluded=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const valid=r=>!r.issues.some(i=>i.level==='error');
+const candidates=()=>preview?preview.rules.filter(r=>!removed.has(r.row)&&!excluded.has(r.row)&&valid(r)):[];
 const picks=()=>Array.from(document.querySelectorAll('.pick:checked')).map(e=>Number(e.value));
-function update(){const n=picks().length;$('count').textContent='已选择 '+n+' / '+(preview?.selected||0);$('import').disabled=!preview||!n||!$('confirm').checked}
+function update(){
+ const n=picks().length;
+ $('count').textContent='已选择 '+n+' / '+(preview?.rules.length||0)+'；删除 '+removed.size+'；禁用候选 '+excluded.size;
+ $('import').disabled=!preview||!n||!$('confirm').checked;
+ $('restore').disabled=!preview||removed.size===0;
+}
+function visible(r){
+ const q=$('search').value.trim().toLowerCase();
+ if(q&&![r.name,r.group,r.exporter,r.promql].some(x=>String(x).toLowerCase().includes(q)))return false;
+ const status=$('filter').value;
+ if(status==='error')return r.issues.some(x=>x.level==='error');
+ if(status==='warning')return r.issues.some(x=>x.level==='warning');
+ if(status==='valid')return valid(r);
+ if(status==='active')return !excluded.has(r.row);
+ if(status==='disabled')return excluded.has(r.row);
+ return true;
+}
+function render(){
+ if(!preview){$('rules').innerHTML='<tr><td colspan="7">请先上传 Excel</td></tr>';update();return}
+ const previouslySelected=new Set(picks());
+ // First rendering selects all valid rows; later renders preserve the selection.
+ const initial=!render.hasRendered;
+ const rows=preview.rules.filter(r=>!removed.has(r.row)&&visible(r));
+ $('rules').innerHTML=rows.map(r=>{
+  const disabled=excluded.has(r.row),hasError=!valid(r);
+  const checked=!disabled&&!hasError&&(initial||previouslySelected.has(r.row));
+  return '<tr><td><input class="pick" type="checkbox" value="'+r.row+'" '+(disabled||hasError?'disabled':'')+' '+(checked?'checked':'')+'></td>'+
+   '<td>'+r.row+'</td><td><b>'+esc(r.name)+'</b><br><small>'+esc(r.group)+' / '+esc(r.exporter)+'</small></td>'+
+   '<td>'+esc(r.duration)+' ('+r.duration_seconds+'s)</td>'+
+   '<td><details><summary>查看 PromQL</summary><pre>'+esc(r.promql)+'</pre></details></td>'+
+   '<td>'+(r.issues.map(x=>'<div class="'+(x.level==='error'?'bad':'warn')+'">'+esc(x.message)+'</div>').join('')||'<span class="ok">通过</span>')+'</td>'+
+   '<td><button class="secondary disable-rule" data-row="'+r.row+'">'+(disabled?'启用候选':'禁用候选')+'</button> <button class="secondary remove-rule" data-row="'+r.row+'">删除</button></td></tr>'
+ }).join('')||'<tr><td colspan="7">当前条件下没有规则</td></tr>';
+ render.hasRendered=true;
+ document.querySelectorAll('.pick').forEach(e=>e.onchange=update);
+ document.querySelectorAll('.disable-rule').forEach(b=>b.onclick=()=>{
+  const row=Number(b.dataset.row);
+  if(excluded.has(row))excluded.delete(row);else excluded.add(row);
+  // Maintain the visible selected rows on re-render.
+  render();
+ });
+ document.querySelectorAll('.remove-rule').forEach(b=>b.onclick=()=>{
+  removed.add(Number(b.dataset.row));render();
+ });
+ update();
+}
+$('search').oninput=render;
+$('filter').onchange=render;
+$('restore').onclick=()=>{removed.clear();render()};
 $('confirm').onchange=update;
+for(const id of ['url','token','group','datasource'])$(id).addEventListener('input',()=>{
+ $('connectionStatus').textContent='连接参数已修改，请重新测试';
+ $('connectionStatus').className='help';
+});
+$('testConnection').onclick=async()=>{
+ const btn=$('testConnection');
+ btn.disabled=true;$('connectionStatus').className='help';$('connectionStatus').textContent='正在测试连接...';
+ try{
+  const res=await fetch('/api/test-connection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+   url:$('url').value.trim(),token:$('token').value,group_id:Number($('group').value),datasource_id:Number($('datasource').value)
+  })});
+  const result=await res.json();
+  if(!res.ok)throw Error(result.error||'连接测试失败');
+  $('connectionStatus').className='ok';
+  $('connectionStatus').textContent='连接成功：业务组 '+result.group_id+' 可读取 '+result.existing_rules+' 条规则；数据源 ID 尚未独立核验';
+ }catch(e){$('connectionStatus').className='bad';$('connectionStatus').textContent='连接失败：'+e.message}
+ finally{btn.disabled=false}
+};
 $('preview').onclick=async()=>{
  const f=$('file').files[0];if(!f){alert('请选择 .xlsx');return}
- $('summary').textContent='正在解析...';
- const fd=new FormData();fd.append('file',f);
- try {
-  const response=await fetch('/api/preview',{method:'POST',body:fd});
-  const p=await response.json();if(!response.ok)throw Error(p.error||'解析失败');
-  preview=p;
-  $('summary').textContent='校验结果：'+p.sheets.length+' 个工作表，原始 '+p.all_rules+' 条，红色 '+p.selected+' 条。\n'+p.workbook_warnings.join('\n');
-  $('rules').innerHTML=p.rules.map((r,i)=>'<tr><td><input class="pick" type="checkbox" value="'+i+'" '+(r.issues.some(x=>x.level==='error')?'disabled':'checked')+'></td><td>'+r.row+'</td><td><b>'+esc(r.name)+'</b><br><small>'+esc(r.group)+' / '+esc(r.exporter)+'</small></td><td>'+esc(r.duration)+' ('+r.duration_seconds+'s)</td><td><details><summary>查看 PromQL</summary><pre>'+esc(r.promql)+'</pre></details></td><td>'+(r.issues.map(x=>'<div class="'+(x.level==='error'?'bad':'warn')+'">'+esc(x.message)+'</div>').join('')||'<span class="ok">通过</span>')+'</td></tr>').join('');
+ $('summary').textContent='正在解析...';const fd=new FormData();fd.append('file',f);
+ try{
+  const res=await fetch('/api/preview',{method:'POST',body:fd});
+  const p=await res.json();if(!res.ok)throw Error(p.error||'解析失败');
+  preview=p;removed.clear();excluded.clear();render.hasRendered=false;
+  $('search').value='';$('filter').value='all';
+  $('summary').textContent='已读取 '+p.sheets.length+' 个工作表，解析有效规则 '+p.rules.length+' 条。\\n'+p.workbook_warnings.join('\\n');
   ['all','none','export'].forEach(id=>$(id).disabled=false);
-  document.querySelectorAll('.pick').forEach(e=>e.onchange=update);update();
- }catch(e){preview=null;$('summary').textContent='解析失败：'+e.message;$('rules').textContent='';update()}
+  render();
+ }catch(e){preview=null;$('summary').textContent='解析失败：'+e.message;render()}
 };
-$('all').onclick=()=>{document.querySelectorAll('.pick:not(:disabled)').forEach(x=>x.checked=true);update()};
-$('none').onclick=()=>{document.querySelectorAll('.pick').forEach(x=>x.checked=false);update()};
-function download(name,value){const blob=new Blob([JSON.stringify(value,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
-$('export').onclick=()=>download('n9e-preview.json',preview);
+$('all').onclick=()=>{document.querySelectorAll('.pick:not(:disabled)').forEach(e=>e.checked=true);update()};
+$('none').onclick=()=>{document.querySelectorAll('.pick').forEach(e=>e.checked=false);update()};
+function download(name,value){const blob=new Blob([JSON.stringify(value,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+$('export').onclick=()=>download('n9e-preview.json',{...preview,removed_rows:[...removed],disabled_candidate_rows:[...excluded],selected_rows:picks()});
 $('import').onclick=async()=>{
  if(!preview||!$('confirm').checked)return;
- const rows=picks().map(i=>preview.rules[i].row);
+ const rows=picks();
  if(!rows.length||!confirm('确定向业务组提交 '+rows.length+' 条默认禁用规则？'))return;
  $('import').disabled=true;$('result').textContent='正在逐条提交...';
- try {
+ try{
   const res=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
    url:$('url').value,token:$('token').value,group_id:Number($('group').value),datasource_id:Number($('datasource').value),
    preview_id:preview.preview_id,rows,confirm:true
   })});
   const obj=await res.json();if(!res.ok)throw Error(obj.error||'导入失败');
-  $('result').textContent='API 接受创建：'+obj.created+'，跳过：'+obj.skipped+'，失败：'+obj.failed+'\n'+obj.items.map(i=>i.status+' | '+i.name+' | '+i.message).join('\n');
+  $('result').textContent='API 接受创建：'+obj.created+'，跳过：'+obj.skipped+'，失败：'+obj.failed+'\\n'+obj.items.map(i=>i.status+' | '+i.name+' | '+i.message).join('\\n');
   download('n9e-import-result.json',obj);
- } catch(e){$('result').textContent='操作中止：'+e.message} finally{update()}
+ }catch(e){$('result').textContent='操作中止：'+e.message}finally{update()}
 };
 </script></body></html>
