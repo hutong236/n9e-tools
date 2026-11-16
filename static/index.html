@@ -27,6 +27,7 @@ h1{font-size:24px;line-height:1.3;margin:0;font-weight:750;letter-spacing:-.5px}
 dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px));max-height:85vh;box-shadow:0 20px 70px #14233e40}dialog::backdrop{background:#11213b8c}.dialog-head{padding:19px 22px;border-bottom:1px solid #e5eaf0;display:flex;justify-content:space-between;align-items:center;gap:12px}.dialog-body{padding:21px 23px;overflow:auto;max-height:calc(85vh - 83px)}.dialog-title{font-size:17px;margin:0;overflow-wrap:anywhere}.detail-label{font-size:11px;color:#8390a3;font-weight:700;margin:19px 0 8px}.detail-value{white-space:pre-wrap;overflow-wrap:anywhere;color:#344154;font-size:13px;line-height:1.7}.code{background:#f6f8fc;border:1px solid #e6ebf4;border-radius:9px;padding:13px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .empty{padding:42px;text-align:center;color:#8290a4}.hidden{display:none!important}
 @media(max-width:1080px){.grid-top{grid-template-columns:1fr}.connection-fields{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.shell{padding:16px 12px 50px}.topbar{align-items:flex-start}h1{font-size:20px}.steps{flex-wrap:wrap}.chevron{padding:0 2px}.card-inner{padding:16px}.upload{grid-template-columns:1fr}.connection-fields{grid-template-columns:1fr 1fr}.connection-fields .field:first-child,.connection-fields .field:nth-child(2){grid-column:span 2}.stats{grid-template-columns:repeat(2,1fr)}.toolbar .searchbox,.toolbar .filterbox,.toolbar .groupbox{width:100%}.pagination{flex-wrap:wrap}}
+.target-choices{display:grid;gap:8px;max-height:200px;overflow:auto;border:1px solid #e4eaf1;border-radius:10px;padding:8px;background:#fcfdff}.target-option{width:100%;text-align:left;border:1px solid #e5ebf3;border-radius:9px;background:white;padding:11px 13px;display:flex;justify-content:space-between;gap:12px;align-items:center;color:#304158}.target-option:hover{border-color:#90b5f7;background:#f8fbff}.target-option.chosen{border:2px solid #2563eb;background:#f0f6ff;padding:10px 12px}.target-option small{color:#718096}.target-empty{padding:14px;text-align:center;color:#8190a2}
 </style>
 </head>
 <body>
@@ -40,14 +41,14 @@ dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px))
 <div id="summary" class="file-info" role="status" aria-live="polite"></div>
 </div></section>
 <section class="card"><div class="card-inner">
-<div class="section-head"><div><h2 class="section-title"><span class="section-num">2</span>Nightingale 连接</h2><p class="section-desc">连接测试只验证 API 和业务组；数据源 ID 暂不独立验证</p></div></div>
+<div class="section-head"><div><h2 class="section-title"><span class="section-num">2</span>Nightingale 连接</h2><p class="section-desc">先填写 URL 和 Token，测试成功后选择业务组及数据源</p></div></div>
 <div class="connection-fields">
 <div class="field"><label for="url">夜莺地址</label><input class="control" id="url" placeholder="http://n9e.internal:17000"></div>
 <div class="field"><label for="token">X-User-Token</label><input class="control" id="token" type="password" autocomplete="off" placeholder="输入访问 Token"></div>
-<div class="field"><label for="group">业务组 ID</label><input class="control" id="group" type="number" min="1" placeholder="1"></div>
-<div class="field"><label for="datasource">数据源 ID</label><input class="control" id="datasource" type="number" min="1" placeholder="1"></div>
+<div class="field"><label for="group">业务组 ID</label><input class="control" id="group" type="number" min="1" placeholder="测试连接后自动填写" readonly></div>
+<div class="field"><label for="datasource">数据源 ID</label><input class="control" id="datasource" type="number" min="1" placeholder="测试连接后自动填写" readonly></div>
 </div>
-<div class="connection-footer"><button class="btn soft" id="testConnection">测试连接</button><span id="connectionStatus" class="statusline" role="status" aria-live="polite">未测试</span></div>
+<div class="connection-footer"><button class="btn soft" id="testConnection">测试连接并选择</button><span id="connectionStatus" class="statusline" role="status" aria-live="polite">未测试</span></div>
 </div></section>
 </div>
 <section class="card"><div class="card-inner">
@@ -89,11 +90,24 @@ dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px))
 <div class="callout" style="margin-top:8px">安全提示：本工具当前无独立登录鉴权，请仅部署在可信内网。API 返回创建成功不代表告警已启用或通知渠道已配置。</div>
 </main>
 <dialog id="detailDialog" aria-labelledby="detailTitle"><div class="dialog-head"><h2 id="detailTitle" class="dialog-title">规则详情</h2><button id="closeDialog" class="btn ghost small" aria-label="关闭规则详情">关闭</button></div><div class="dialog-body" id="detailBody"></div></dialog>
+<dialog id="targetDialog" aria-labelledby="targetTitle">
+<div class="dialog-head"><div><h2 class="dialog-title" id="targetTitle">选择夜莺业务组和数据源</h2><p class="subtitle">从当前 Token 可访问的资源中选择，确认后自动回填 ID</p></div><button class="btn ghost small" id="closeTargetDialog" type="button">关闭</button></div>
+<div class="dialog-body">
+<div id="targetStatus" class="callout" role="status" aria-live="polite"></div>
+<div class="field" style="margin:16px 0"><label for="targetGroupSearch">搜索业务组</label><input id="targetGroupSearch" class="control" placeholder="按业务组名称或 ID 搜索"></div>
+<div id="targetGroups" class="target-choices" role="radiogroup" aria-label="业务组"></div>
+<div class="field" style="margin:20px 0 10px"><label for="targetDatasourceSearch">搜索数据源</label><input id="targetDatasourceSearch" class="control" placeholder="按数据源名称、类型或 ID 搜索"></div>
+<div id="targetDatasources" class="target-choices" role="radiogroup" aria-label="数据源"></div>
+<p class="callout">仅选择导入目标，不会创建或修改业务组、数据源；建议选择 Prometheus 兼容数据源用于 PromQL 规则。</p>
+<div class="footerline" style="justify-content:flex-end;margin-top:18px"><button class="btn ghost" id="cancelTargets">取消</button><button class="btn" id="confirmTargets" disabled>确认选择并回填</button></div>
+</div>
+</dialog>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
 const escapeHTML=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
 let preview=null, connectionOK=false, importing=false, page=1, lastResult=null;
+let discovered=null, chosenGroup=null, chosenDatasource=null, discoveryBusy=false;
 const selected=new Set(), paused=new Set(), removed=new Set();
 const isValid=r=>!r.issues.some(i=>i.level==="error");
 const hasWarning=r=>r.issues.some(i=>i.level==="warning");
@@ -114,7 +128,7 @@ function filtersMatch(r){
 }
 function filteredRows(){return preview?preview.rules.filter(r=>!removed.has(r.row)&&filtersMatch(r)):[]}
 function filteredSelected(){return filteredRows().filter(r=>eligible(r)&&selected.has(r.row))}
-function markTestInvalid(){connectionOK=false;$("connectionStatus").className="statusline";$("connectionStatus").textContent="连接参数已变更，请重新测试";update()}
+function markTestInvalid(){connectionOK=false;discovered=null;chosenGroup=null;chosenDatasource=null;$("group").value="";$("datasource").value="";$("connectionStatus").className="statusline";$("connectionStatus").textContent="连接信息已变更，请重新测试并选择";update()}
 function update(){
  const count=picks().length, visible=filteredRows(), inScope=filteredSelected().length;
  $("statTotal").textContent=preview?preview.rules.length:"—";
@@ -211,15 +225,61 @@ $("bulkEnable").onclick=()=>{
 $("restore").onclick=()=>{if(confirm("恢复本次预览中全部 "+removed.size+" 条已删除规则？")){removed.clear();render()}};
 $("confirm").onchange=update;
 for(const id of ["url","token","group","datasource"])$(id).addEventListener("input",markTestInvalid);
+function renderTargets(){
+ const groups=discovered?.groups||[],datasources=discovered?.datasources||[];
+ const q1=$("targetGroupSearch").value.trim().toLowerCase(),q2=$("targetDatasourceSearch").value.trim().toLowerCase();
+ const groupMatches=groups.filter(x=>(x.name+" "+x.id).toLowerCase().includes(q1));
+ const dsMatches=datasources.filter(x=>(x.name+" "+x.id+" "+x.kind).toLowerCase().includes(q2));
+ const row=(x,selected,type)=>'<button type="button" class="target-option '+(selected===x.id?'chosen':'')+'" data-type="'+type+'" data-id="'+x.id+'" role="radio" aria-checked="'+(selected===x.id)+'"><span><strong>'+escapeHTML(x.name)+'</strong><br><small>ID: '+x.id+(type==="datasource"?" · "+escapeHTML(x.kind||"未标注类型"):"")+'</small></span><span>'+(selected===x.id?'✓':'○')+'</span></button>';
+ $("targetGroups").innerHTML=groupMatches.map(x=>row(x,chosenGroup,"group")).join("")||'<div class="target-empty">没有匹配的业务组</div>';
+ $("targetDatasources").innerHTML=dsMatches.map(x=>row(x,chosenDatasource,"datasource")).join("")||'<div class="target-empty">没有匹配的数据源</div>';
+ $("confirmTargets").disabled=chosenGroup===null||chosenDatasource===null;
+ $("targetStatus").textContent="查询成功：业务组 "+groups.length+" 个，数据源 "+datasources.length+" 个。请选择两项后确认。";
+}
+for(const id of ["targetGroups","targetDatasources"])$(id).addEventListener("click",event=>{
+ const button=event.target.closest("button[data-id]");if(!button||!discovered)return;
+ const num=Number(button.dataset.id);
+ if(button.dataset.type==="group")chosenGroup=num;else chosenDatasource=num;
+ renderTargets();
+});
+$("targetGroupSearch").oninput=renderTargets;
+$("targetDatasourceSearch").oninput=renderTargets;
+function closeTargets(){$("targetDialog").close()}
+$("closeTargetDialog").onclick=closeTargets;
+$("cancelTargets").onclick=closeTargets;
+$("targetDialog").addEventListener("close",()=>{if(!connectionOK){$("connectionStatus").className="statusline";$("connectionStatus").textContent="已连接夜莺，但尚未选定导入目标";}});
+$("confirmTargets").onclick=()=>{
+ if(!discovered||chosenGroup===null||chosenDatasource===null)return;
+ const g=discovered.groups.find(x=>x.id===chosenGroup),d=discovered.datasources.find(x=>x.id===chosenDatasource);
+ if(!g||!d)return;
+ $("group").value=String(g.id);$("datasource").value=String(d.id);
+ connectionOK=true;
+ $("connectionStatus").className="statusline success";
+ $("connectionStatus").textContent="连接成功 · 业务组："+g.name+" (#"+g.id+") · 数据源："+d.name+" (#"+d.id+")";
+ closeTargets();update();
+};
 $("testConnection").onclick=async()=>{
- const button=$("testConnection");button.disabled=true;$("connectionStatus").className="statusline";$("connectionStatus").textContent="正在验证…";connectionOK=false;update();
+ if(discoveryBusy)return;
+ const button=$("testConnection");
+ const url=$("url").value.trim(),token=$("token").value;
+ if(!url||!token){$("connectionStatus").className="statusline error";$("connectionStatus").textContent="请先填写 URL 和 X-User-Token";return}
+ discoveryBusy=true;connectionOK=false;discovered=null;chosenGroup=null;chosenDatasource=null;
+ $("group").value="";$("datasource").value="";
+ button.disabled=true;$("connectionStatus").className="statusline";$("connectionStatus").textContent="正在验证 Token 并查询业务组、数据源…";update();
  try{
-  const response=await fetch("/api/test-connection",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:$("url").value.trim(),token:$("token").value,group_id:Number($("group").value),datasource_id:Number($("datasource").value)})});
-  const data=await response.json();if(!response.ok)throw Error(data.error||"测试失败");
-  connectionOK=true;$("connectionStatus").className="statusline success";
-  $("connectionStatus").textContent="连接成功 · 可读取业务组 "+data.group_id+" 的 "+data.existing_rules+" 条规则（数据源 ID 未单独验证）";
- }catch(e){$("connectionStatus").className="statusline error";$("connectionStatus").textContent="连接失败 · "+e.message}
- finally{button.disabled=false;update()}
+  const res=await fetch("/api/discover",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,token})});
+  const data=await res.json();
+  if(!res.ok)throw Error(data.error||"查询失败");
+  if(!Array.isArray(data.groups)||!Array.isArray(data.datasources))throw Error("夜莺返回的资源列表格式无效");
+  discovered=data;
+  $("targetGroupSearch").value="";$("targetDatasourceSearch").value="";
+  $("targetStatus").textContent="";
+  renderTargets();
+  $("connectionStatus").className="statusline success";
+  $("connectionStatus").textContent="身份验证成功，请在弹窗中选择导入目标";
+  $("targetDialog").showModal();
+ }catch(e){$("connectionStatus").className="statusline error";$("connectionStatus").textContent="测试失败 · "+e.message}
+ finally{discoveryBusy=false;button.disabled=false;update()}
 };
 $("preview").onclick=async()=>{
  const file=$("file").files[0];if(!file){alert("请选择 .xlsx 文件");return}
