@@ -1,15 +1,15 @@
-# n9e-tools — Nightingale v8 Excel 红色告警规则导入
+# n9e-tools — Nightingale v8 Excel 告警规则批量导入
 
 Rust + Axum 独立 Web 工具，适配 **《夜莺告警配置表格（严重告警）_20261113_标红筛选.xlsx》** 的 11 Sheet 结构。本项目不是通用 Excel 解析器。
 
 ## 固定规则
 
-- 识别「规则配置明细」A 列**红色单元格背景填充**，目标 **54 条**（总计 104 条）；样式由 XLSX 的 `styles.xml` 动态识别，不硬编码 style 12。
+- **不按颜色筛选**：读取「规则配置明细」中的全部有效规则（已上传模板共 **104 条**），保留 11 Sheet 数据关联；不要求 A 列标红。
 - 按规则名称关联「规则配置明细」、「告警参数配置」、「严重告警清单」；检查其余 8 张 Sheet 存在，提示通知/采集前置条件。当前未将其余 8 张 Sheet 所有字段自动转换成告警配置。
 - PromQL 采用「规则配置明细」H 列**原始表达式**；for 采用「告警参数配置」G 列**原始时长**。包含 `0m` 的合法规则不会被误判。
 - 告警级别 S1；目标 Nightingale 业务组 ID 与数据源 ID 在界面填写，不自动按 Excel 中的 exporter 分组猜测。
 - 同业务组**同名跳过**、只创建 `disabled=1` 规则、不自动绑定消息模板、接收组或通知路由。
-- Excel → 校验 → 预览 → 勾选 → 确认 → API 创建 → 逐条 JSON 结果。
+- Excel → 全量解析 → 搜索 / 校验过滤 → 逐条勾选 / 禁用候选 / 删除候选 → 确认 → API 创建 → 逐条 JSON 结果。\n- 禁用候选和删除候选只作用于本次**浏览器端待导入列表**，不修改已存在的夜莺规则；导入创建依然默认 `disabled=1`。\n- 夜莺连接测试按钮通过实际 GET 业务组告警规则 API 检查 URL、Token、业务组访问权限；**暂不独立验证数据源 ID**。
 
 ## 快速开始
 
@@ -34,9 +34,9 @@ Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，�
 
 ## HTTP 接口
 
-**POST /api/preview**：multipart 表单中字段 `file` 为 XLSX，限制 16 MiB。返回 `preview_id`、54 条规则及每条 error/warning。服务器仅在内存保留预览会话，最多保留约 20 个会话，重启后需要重新上传。
+**POST /api/preview**：multipart 表单中字段 `file` 为 XLSX，限制 16 MiB。返回 `preview_id`、全部有效规则及每条 error/warning。服务器仅在内存保留预览会话，最多保留约 20 个会话，重启后需要重新上传。
 
-**POST /api/import**：JSON 请求：
+**POST /api/test-connection**：JSON 请求：\n\n```json\n{"url":"https://n9e.example.internal","token":"YOUR_TOKEN","group_id":1,"datasource_id":1}\n```\n\n会调用夜莺的业务组告警规则 API，检查 HTTP、JSON、业务错误并返回当前业务组规则数量。测试成功**不表示**数据源 ID 已验证，也不表示 PromQL 已通过指标查询。\n\n**POST /api/import**：JSON 请求：
 
 ```json
 {
@@ -54,7 +54,7 @@ Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，�
 
 ## 当前验收状态及限制
 
-- 已根据用户上传的 Excel 独立核对：11 张 Sheet、104 条明细、54 条红色填充；标红集合中有 **11 条原始持续时间为 0m**。
+- 已根据用户上传的 Excel 独立核对：11 张 Sheet、104 条规则，其中 54 条原先有红色填充（新版本不再据此筛选）；`0m` 持续时间保持不变。
 - GitHub Actions 工作流包含 `cargo test --all-targets` 和 `cargo build --release`；请以仓库 Actions 运行状态判断 Rust 编译是否通过。
 - **尚未连接用户的实际 Nightingale v8 环境**，请求体各字段须在该目标小版本上执行一条禁用规则的灰度验收。
 - API 返回成功只表示请求被接受；当前没有逐条回读或强一致核对，也没有事务回滚。
