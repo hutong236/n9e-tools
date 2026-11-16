@@ -18,6 +18,7 @@ jobs:
           Path("/tmp/n9e-importer-ui.js").write_text(html.split("<script>", 1)[1].split("</script>", 1)[0], encoding="utf-8")
           PY
           node --check /tmp/n9e-importer-ui.js
+          node --test tests/ui-selection.test.cjs
       - uses: dtolnay/rust-toolchain@stable
       - name: Rust unit tests
         run: cargo test --all-targets
