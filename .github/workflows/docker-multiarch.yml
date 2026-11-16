@@ -108,12 +108,10 @@ jobs:
           {
             echo '## Multi-platform image published'
             echo ''
-            echo "- Image: \`$IMAGE:$IMAGE_TAG\`"
-            echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
-            echo "- Digest: \`$DIGEST\`"
+            echo "Image: $IMAGE:$IMAGE_TAG"
+            echo 'Platforms: linux/amd64, linux/arm64'
+            echo "Digest: $DIGEST"
             echo ''
-            echo 'Pull using:'
-            echo '\`\`\`bash'
+            echo 'Pull:'
             echo "docker pull $IMAGE:$IMAGE_TAG"
-            echo '\`\`\`'
           } >> "$GITHUB_STEP_SUMMARY"
