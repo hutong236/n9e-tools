@@ -68,3 +68,46 @@ test("pagination does not reset cross-page selection",()=>{
  node("search").value="";ui.render();
  assert.equal(ui.picks().length,15);
 });
+
+test("connection discovery opens picker and fills both IDs only after confirmation",async()=>{
+ const nodes=new Map();
+ const events=new Map();
+ function node(id){
+  if(!nodes.has(id))nodes.set(id,{
+    value:id==="pageSize"?"20":id==="filter"?"all":"",
+    textContent:"",innerHTML:"",disabled:false,checked:false,className:"",
+    classList:{add(){},remove(){}},
+    addEventListener(name,handler){events.set(id+":"+name,handler)},
+    appendChild(){},
+    showModal(){this.open=true},close(){this.open=false}
+  });
+  return nodes.get(id);
+ }
+ const document={getElementById:node,createElement(){return {value:"",textContent:""}}};
+ const mockFetch=async(url,options)=>{
+  assert.equal(url,"/api/discover");
+  const credentials=JSON.parse(options.body);
+  assert.equal(credentials.url,"http://n9e.internal");
+  assert.equal(credentials.token,"test-token");
+  assert.equal(Object.hasOwn(credentials,"group_id"),false);
+  return {ok:true,json:async()=>({groups:[{id:12,name:"生产业务组",kind:""}],datasources:[{id:27,name:"VM-prod",kind:"prometheus"}]})};
+ };
+ new Function("document","confirm","alert","fetch",script)(document,()=>true,()=>{},mockFetch);
+ node("url").value="http://n9e.internal";
+ node("token").value="test-token";
+ await node("testConnection").onclick();
+ assert.equal(node("targetDialog").open,true,"Successful discovery opens the selection dialog");
+ assert.equal(node("group").value,"","No auto-selection before user confirmation");
+ assert.equal(node("datasource").value,"");
+ const groupClick=events.get("targetGroups:click");
+ const dsClick=events.get("targetDatasources:click");
+ assert.ok(groupClick&&dsClick);
+ groupClick({target:{closest(){return {dataset:{id:"12",type:"group"}}}}});
+ dsClick({target:{closest(){return {dataset:{id:"27",type:"datasource"}}}}});
+ assert.equal(node("confirmTargets").disabled,false);
+ node("confirmTargets").onclick();
+ assert.equal(node("group").value,"12");
+ assert.equal(node("datasource").value,"27");
+ assert.equal(node("targetDialog").open,false);
+ assert.match(node("connectionStatus").textContent,/生产业务组/);
+});
