@@ -1,4 +1,4 @@
-//! Parse the supplied 11-sheet XLSX. Resolve foreground fill colors via OOXML styles.
+//! Parse all valid rules from the supplied 11-sheet XLSX without color filtering.
 use serde::{Deserialize,Serialize};
 use std::{collections::{HashMap,HashSet},io::{Cursor,Read}};
 use zip::ZipArchive;
@@ -68,8 +68,6 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  let names:Vec<String>=w.descendants().filter(|n|n.has_tag_name("sheet")).filter_map(|n|n.attribute("name").map(str::to_owned)).collect();
  let expected=["说明","严重告警清单","规则配置明细","告警参数配置","告警参数规范","采集侧标签配置","告警侧派生标签","host_ip 可派生性","通知路由配置","消息模板","待确认事项"];
  if names.len()!=11||expected.iter().any(|s|!names.iter().any(|n|n==s)){return Err("工作簿的11个Sheet与模板不一致，已拒绝导入".into())}
- let reds=red_styles(&read_file(&mut zip,"xl/styles.xml")?)?;
- if reds.is_empty(){return Err("未发现红色填充单元格样式".into())}
  let mut sheets=HashMap::<String,Rows>::new();
  for (i,n) in names.iter().enumerate(){let rows=parse_rows(&read_file(&mut zip,&format!("xl/worksheets/sheet{}.xml",i+1))?,&ss)?;sheets.insert(n.clone(),rows);}
  let details=sheets.get("规则配置明细").unwrap();let params=index_by_name(sheets.get("告警参数配置").unwrap(),"B");
@@ -78,7 +76,6 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  for r in details{
   let rn=get(r,"#row").parse::<u32>().unwrap_or(0);
   if rn<5||get(r,"B").is_empty()||get(r,"H").is_empty(){continue}all+=1;
-  let style=get(r,"#style").parse::<usize>().unwrap_or(0);if !reds.contains(&style){continue}
   let name=get(r,"B").trim().to_string();let p=params.get(&name);let o=overview.get(&name);
   let v=|m:Option<&HashMap<String,String>>,key:&str|m.map(|r|get(r,key).to_string()).unwrap_or_default();
   let orig=v(p,"G");let overview_d=v(o,"I");let duration=if orig.is_empty(){overview_d.clone()}else{orig.clone()};
@@ -96,8 +93,7 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
   let rule=Rule{row:rn,name,group:get(r,"C").into(),exporter:v(o,"B"),category:get(r,"D").into(),promql:get(r,"H").into(),suggested_promql:get(r,"I").into(),duration,duration_seconds,suggested_duration:v(p,"H"),summary:get(r,"J").into(),description:get(r,"K").into(),suggestion:get(r,"L").into(),note:get(r,"R").into(),notification:format!("{} / {} / {}",get(r,"M"),get(r,"N"),get(r,"O")),label_requirements:v(p,"M"),recovery:v(p,"J"),repeat:v(p,"K"),issues};
   rules.push(rule)
  }
- if all!=104||rules.len()!=54{return Err(format!("模板校验失败：实际识别全部 {all} 条，红色 {} 条；预期 104/54，拒绝导入",rules.len()))}
- let mut warnings=vec!["仅将规则配置明细A列红色填充对应的54条作为导入候选；所有11个Sheet均已读取".into(),"通知路由、消息模板、采集侧标签与待确认事项只作为校验上下文，不自动写入夜莺".into()];
+ let mut warnings=vec!["全部有效规则均列入候选，不按颜色筛选；用户可在预览中自行过滤、禁用、删除".into(),"通知路由、消息模板、采集侧标签与待确认事项只作为校验上下文，不自动写入夜莺".into()];
  if sheets.get("待确认事项").map(|a|a.len()).unwrap_or(0)>4{warnings.push("待确认事项存在，请先人工核对生产前置条件".into())}
  Ok(Preview{preview_id:String::new(),sheets:names,selected:rules.len(),all_rules:all,rules,workbook_warnings:warnings})
 }
@@ -151,10 +147,10 @@ mod integration_tests {
   let preview=parse(&out.into_inner()).unwrap();
   assert_eq!(preview.sheets.len(),11);
   assert_eq!(preview.all_rules,104);
-  assert_eq!(preview.selected,54);
-  assert_eq!(preview.rules.len(),54);
+  assert_eq!(preview.selected,104);
+  assert_eq!(preview.rules.len(),104);
   assert_eq!(preview.rules.iter().filter(|r|r.duration_seconds==0).count(),11);
   assert_eq!(preview.rules[0].promql,"vector(1) > 0");
-  assert_eq!(preview.rules[53].row,58);
+  assert_eq!(preview.rules[103].row,108);
  }
 }
