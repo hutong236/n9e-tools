@@ -26,8 +26,8 @@ cargo run --release
 ## Docker 启动
 
 ```bash
-docker build -t n9e-tools:0.5 .
-docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.5
+docker build -t n9e-tools:0.6 .
+docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.6
 ```
 
 Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，对远程操作使用受控代理或 VPN。项目的 Web 接口当前没有独立登录功能。
@@ -36,7 +36,7 @@ Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，�
 
 **POST /api/preview**：multipart 表单中字段 `file` 为 XLSX，限制 16 MiB。返回 `preview_id`、全部有效规则及每条 error/warning。服务器仅在内存保留预览会话，最多保留约 20 个会话，重启后需要重新上传。
 
-**POST /api/test-connection**：JSON 请求：\n\n```json\n{"url":"https://n9e.example.internal","token":"YOUR_TOKEN","group_id":1,"datasource_id":1}\n```\n\n会调用夜莺的业务组告警规则 API，检查 HTTP、JSON、业务错误并返回当前业务组规则数量。测试成功**不表示**数据源 ID 已验证，也不表示 PromQL 已通过指标查询。\n\n**POST /api/import**：JSON 请求：
+**POST /api/test-connection**：JSON 请求：\n\n```json\n{"url":"https://n9e.example.internal","token":"YOUR_TOKEN","group_id":1,"datasource_id":1}\n```\n\n会调用夜莺的业务组告警规则 API，检查 HTTP、JSON、业务错误并返回当前业务组规则数量。测试成功**不表示**数据源 ID 已验证，也不表示 PromQL 已通过指标查询。\n\n**POST /api/import**：JSON 请求（兼容旧客户端）：
 
 ```json
 {
@@ -75,13 +75,13 @@ cargo build --release
 
 进入仓库的 [Actions → Build multi-platform Docker image](https://github.com/hutong236/n9e-tools/actions/workflows/docker-multiarch.yml)，点击 **Run workflow**，选择 `main` 分支并设置：
 
-- `tag`：镜像版本标签，例如 `v0.5.0`（必填，默认 `v0.5.0`）。
+- `tag`：镜像版本标签，例如 `v0.6.0`（必填，默认 `v0.6.0`）。
 - `push_latest`：是否同时覆盖推送 `latest`（默认关闭，发布正式稳定版时才建议勾选）。
 
 工作流使用 Docker Buildx + QEMU，在 GitHub 托管的 Ubuntu Runner 上构建 **linux/amd64** 和 **linux/arm64**，并将统一的多架构 manifest 推送到 GitHub Container Registry：
 
 ```text
-ghcr.io/hutong236/n9e-tools:v0.5.0
+ghcr.io/hutong236/n9e-tools:v0.6.0
 ```
 
 无需额外提供 GHCR 密码。工作流通过 `secrets.GITHUB_TOKEN` 登录，具备 `packages: write` 最小权限。首次发布的 GHCR Package 可见性可能默认为 Private；若需要匿名拉取，请到 GitHub 的 Package Settings 设置为 Public。
@@ -89,16 +89,16 @@ ghcr.io/hutong236/n9e-tools:v0.5.0
 ### 拉取和部署
 
 ```bash
-docker pull ghcr.io/hutong236/n9e-tools:v0.5.0
+docker pull ghcr.io/hutong236/n9e-tools:v0.6.0
 
 docker run --rm -p 127.0.0.1:8088:8088 \
-  ghcr.io/hutong236/n9e-tools:v0.5.0
+  ghcr.io/hutong236/n9e-tools:v0.6.0
 ```
 
 Docker 会按宿主机架构自动选择 amd64 或 arm64 镜像。可以使用：
 
 ```bash
-docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.5.0
+docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.6.0
 ```
 
 检查 manifest 中是否包含两个目标平台。
@@ -118,23 +118,23 @@ docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.5.0
 
 ## GitHub Actions：手工打包 Linux、macOS 与 Windows 二进制程序
 
-在 [Actions → Build downloadable binaries](https://github.com/hutong236/n9e-tools/actions/workflows/binary-release.yml) 中点击 **Run workflow**，选择 `main`，输入包名标签（默认 `v0.5.0`）。
+在 [Actions → Build downloadable binaries](https://github.com/hutong236/n9e-tools/actions/workflows/binary-release.yml) 中点击 **Run workflow**，选择 `main`，输入包名标签（默认 `v0.6.0`）。
 
 此任务与 Docker 镜像工作流相互独立，不会自动推送镜像。三个平台均成功编译和通过测试后，工作流将**自动创建新的 GitHub Release**，并上传三个压缩包及对应的 SHA-256 校验文件。三台 GitHub Runner 分别原生编译：
 
 | 平台 | Runner | Rust target | 结果 |
 | --- | --- | --- | --- |
-| Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `n9e-tools-v0.5.0-linux-x86_64.tar.gz` |
-| macOS Apple Silicon | `macos-15`（ARM64） | `aarch64-apple-darwin` | `n9e-tools-v0.5.0-macos-arm64.tar.gz` |
-| Windows x86_64（64 位） | `windows-2022` | `x86_64-pc-windows-msvc` | `n9e-tools-v0.5.0-windows-x86_64.zip` |
+| Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `n9e-tools-v0.6.0-linux-x86_64.tar.gz` |
+| macOS Apple Silicon | `macos-15`（ARM64） | `aarch64-apple-darwin` | `n9e-tools-v0.6.0-macos-arm64.tar.gz` |
+| Windows x86_64（64 位） | `windows-2022` | `x86_64-pc-windows-msvc` | `n9e-tools-v0.6.0-windows-x86_64.zip` |
 
 运行成功后，打开 [GitHub Releases](https://github.com/hutong236/n9e-tools/releases)，找到本次输入的版本号，直接下载对应平台的压缩包和 SHA-256 文件。构建过程也会把产物保留在 Actions Artifacts 中（30 天）。每个平台包含可执行程序（Windows 为 `n9e-tools.exe`）和 README。构建会执行 Rust 测试，并通过 `file` 命令检查二进制文件。
 
 Linux 安装示例：
 
 ```bash
-tar -xzf n9e-tools-v0.5.0-linux-x86_64.tar.gz
-cd n9e-tools-v0.5.0-linux-x86_64
+tar -xzf n9e-tools-v0.6.0-linux-x86_64.tar.gz
+cd n9e-tools-v0.6.0-linux-x86_64
 chmod +x n9e-tools
 ./n9e-tools
 ```
@@ -142,8 +142,8 @@ chmod +x n9e-tools
 macOS Apple Silicon 安装示例：
 
 ```bash
-tar -xzf n9e-tools-v0.5.0-macos-arm64.tar.gz
-cd n9e-tools-v0.5.0-macos-arm64
+tar -xzf n9e-tools-v0.6.0-macos-arm64.tar.gz
+cd n9e-tools-v0.6.0-macos-arm64
 chmod +x n9e-tools
 ./n9e-tools
 ```
@@ -178,11 +178,38 @@ Release 地址示例：`https://github.com/hutong236/n9e-tools/releases/tag/v0.4
 
 ### Windows x86_64 运行方法
 
-从对应 [GitHub Release](https://github.com/hutong236/n9e-tools/releases) 下载 `n9e-tools-v0.5.0-windows-x86_64.zip`，解压后在 PowerShell 中执行：
+从对应 [GitHub Release](https://github.com/hutong236/n9e-tools/releases) 下载 `n9e-tools-v0.6.0-windows-x86_64.zip`，解压后在 PowerShell 中执行：
 
 ```powershell
-cd .\\n9e-tools-v0.5.0-windows-x86_64
+cd .\\n9e-tools-v0.6.0-windows-x86_64
 .\\n9e-tools.exe
 ```
 
 在 Windows 浏览器访问 `http://127.0.0.1:8088`。如果 Windows Defender 防火墙弹出提示，应根据实际内网使用场景配置访问范围。Windows 发布包采用 MSVC 64 位目标（不是 32 位 x86）。
+
+## V0.6.0：实时导入进度与结构化结果
+
+导入时不再等待全部告警规则执行后才显示一段平铺文本。Web 页面使用 `POST /api/import-stream` 读取 **NDJSON 流**，每条规则的 Nightingale API 请求执行完毕后立即更新界面：
+
+- **进度：** 当前执行规则、已处理/总数和百分比。百分比根据服务端已完成的规则数量计算，不是估算值。
+- **统计：** 创建成功、同名跳过、失败/校验错误、剩余待处理四项指标。
+- **结果明细：** 表格显示 Excel 行号、规则名称、执行状态及返回说明；支持状态过滤和关键字搜索。
+- **导出：** 所有结果可以下载完整 JSON 或 UTF-8 BOM CSV（方便 Excel 打开），导出的是全部已处理记录，不受屏幕过滤或最多显示 200 条的限制。
+- **异常：** 网络连接中断或服务端返回业务错误时，明确标为“已中断”，保留已接收到的部分结果；不将不确定状态伪装为成功。
+
+NDJSON 事件示例：
+
+```json
+{"type":"started","total":2}
+{"type":"current","index":1,"row":5,"name":"CPU 使用率"}
+{"type":"item","index":1,"total":2,"item":{"row":5,"name":"CPU 使用率","status":"created","message":"API已接受创建请求（默认禁用）"}}
+{"type":"current","index":2,"row":6,"name":"已有规则"}
+{"type":"item","index":2,"total":2,"item":{"row":6,"name":"已有规则","status":"skipped","message":"同业务组内已存在同名规则"}}
+{"type":"complete","total":2,"created":1,"skipped":1,"failed":0}
+```
+
+协议在响应头中使用 `Content-Type: application/x-ndjson`，逐行输出。该接口与原有 `POST /api/import` 复用同一套校验、同名跳过和默认禁用的创建逻辑，原接口保持可用。
+
+**重要：** 流式页面断开连接不等于已取消服务端任务。服务端可能仍在创建规则，因此页面刷新、浏览器断网或请求异常后，必须先到 Nightingale 核对实际写入情况，不要直接重复点击导入。API 创建成功也不等于规则已被激活（仍默认禁用）。
+
+如部署时经过 Nginx/反向代理，请关闭该接口的响应缓冲，以便逐条进度及时显示。服务端已设置 `X-Accel-Buffering: no`。
