@@ -22,7 +22,16 @@ h1{font-size:24px;line-height:1.3;margin:0;font-weight:750;letter-spacing:-.5px}
 .selection-bar{background:#f8faff;border:1px solid #e5ebf5;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px}.selection-note{font-size:12px;color:#68778e;margin-right:auto}.selection-note strong{color:#1d4ed8}.scope-label{font-size:11px;color:#718096;width:100%;margin-bottom:1px}
 .table-wrap{border:1px solid #e6ebf2;border-radius:10px;overflow-x:auto}table{border-collapse:collapse;width:100%}th{text-align:left;background:#f8fafd;color:#64748b;font-size:11px;font-weight:650;padding:12px 14px;white-space:nowrap;border-bottom:1px solid #e4eaf2}td{font-size:12px;padding:14px;border-bottom:1px solid #edf0f5;vertical-align:middle;color:#475569}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#fbfcff}tbody tr.is-paused{background:#fafbfe;opacity:.75}td.checkcol{width:38px}td.numcol{width:72px;color:#94a0b0;font-variant-numeric:tabular-nums}td.rulecol{min-width:250px;max-width:340px}td.querycol{min-width:220px;max-width:300px}.rule-name{font-weight:750;color:#202c3f;font-size:13px;overflow-wrap:anywhere}.rule-sub{font-size:11px;color:#8b97a8;margin-top:5px}.query-preview{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:290px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#58667c;font-size:11px}.validation{display:flex;gap:7px;align-items:center}.row-actions{display:flex;gap:5px;white-space:nowrap}
 .pagination{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:14px 0 0}.pagination .meta{margin-right:auto;color:#8290a4;font-size:12px}
-.result-card{display:none}.result-card.visible{display:block}.result-text{color:#334155;line-height:1.65;font-size:12px;white-space:pre-wrap}.callout{color:#697c95;font-size:12px;line-height:1.7;margin-top:14px}.callout summary{cursor:pointer}.callout ul{margin:8px 0;padding-left:20px}
+.result-card{display:none}.result-card.visible{display:block}
+.import-stage{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.import-stage .tag{font-size:12px}
+.progress-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin:17px 0 9px}.progress-head strong{font-size:16px}.progress-head span{font-size:12px;color:#728198}
+.progress-track{height:11px;background:#eaf0f8;border-radius:999px;overflow:hidden}.progress-fill{height:100%;width:0%;background:#2563eb;transition:width .25s ease}.progress-fill.done{background:#15966d}.progress-fill.partial{background:#e0a333}
+.import-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0}.import-stat{border:1px solid #e7ecf4;border-radius:11px;background:#fbfcfe;padding:12px 14px}.import-stat strong{display:block;font-size:23px;line-height:1.25;font-variant-numeric:tabular-nums}.import-stat span{display:block;font-size:12px;color:#748196;margin-top:5px}
+.import-current{border:1px solid #e6eaf0;background:#f7faff;border-radius:10px;padding:12px 14px;color:#43536b;font-size:12px;display:flex;gap:9px;align-items:center;overflow-wrap:anywhere}.import-current.active:before{content:"";width:8px;height:8px;flex:none;border-radius:100%;background:#2563eb;box-shadow:0 0 0 4px #2563eb18;animation:blink 1.3s ease-in-out infinite}@keyframes blink{50%{opacity:.35}} 
+.import-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:18px 0 11px}.import-toolbar .field{width:190px}.import-toolbar .field:first-child{width:min(100%,330px)}.import-toolbar .spacer{flex:1}
+.import-table-wrap{border:1px solid #e4eaf1;border-radius:10px;overflow:auto;max-height:400px}.import-table{width:100%;min-width:660px}.import-table th{position:sticky;top:0;z-index:1}.import-table td{padding:11px 13px}.import-message{max-width:480px;overflow-wrap:anywhere;color:#69768a}.import-rule{max-width:320px;overflow-wrap:anywhere;color:#2b394e;font-weight:650}.import-count{font-size:12px;color:#7a889d;margin-top:10px}
+.import-alert{margin-top:14px;padding:11px 13px;border:1px solid #f5d7c8;background:#fff8f1;color:#914c27;border-radius:9px;font-size:12px;line-height:1.65;display:none;white-space:pre-wrap}.import-alert.visible{display:block}
+@media(max-width:700px){.import-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.import-toolbar .field,.import-toolbar .field:first-child{width:100%}}.callout{color:#697c95;font-size:12px;line-height:1.7;margin-top:14px}.callout summary{cursor:pointer}.callout ul{margin:8px 0;padding-left:20px}
 .footerline{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.footerline .muted{color:#7a879b;font-size:12px;line-height:1.5}.checkline{display:flex;align-items:flex-start;gap:9px;margin:0 0 14px;color:#42516a;font-size:13px;line-height:1.6}.checkline input{margin-top:4px}
 dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px));max-height:85vh;box-shadow:0 20px 70px #14233e40}dialog::backdrop{background:#11213b8c}.dialog-head{padding:19px 22px;border-bottom:1px solid #e5eaf0;display:flex;justify-content:space-between;align-items:center;gap:12px}.dialog-body{padding:21px 23px;overflow:auto;max-height:calc(85vh - 83px)}.dialog-title{font-size:17px;margin:0;overflow-wrap:anywhere}.detail-label{font-size:11px;color:#8390a3;font-weight:700;margin:19px 0 8px}.detail-value{white-space:pre-wrap;overflow-wrap:anywhere;color:#344154;font-size:13px;line-height:1.7}.code{background:#f6f8fc;border:1px solid #e6ebf4;border-radius:9px;padding:13px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .empty{padding:42px;text-align:center;color:#8290a4}.hidden{display:none!important}
@@ -85,7 +94,30 @@ dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px))
 <section class="card"><div class="card-inner">
 <div class="section-head"><div><h2 class="section-title"><span class="section-num">4</span>确认并执行导入</h2><p class="section-desc">同业务组同名跳过，创建的规则保持禁用；先用测试业务组验证</p></div><span class="tag">不会更新已有规则</span></div>
 <div class="footerline"><label class="checkline"><input type="checkbox" id="confirm"><span>我已确认目标业务组、数据源及校验警告，并了解导入后规则仍处于禁用状态。</span></label><button class="btn" id="import" disabled>导入选中规则（0）</button></div>
-<div id="resultCard" class="result-card"><hr style="border:0;border-top:1px solid #edf1f6;margin:20px 0"><div class="footerline"><strong>导入结果</strong><button class="btn soft small" id="downloadResult" disabled>下载结果 JSON</button></div><div id="result" class="result-text" aria-live="polite"></div></div>
+<div id="resultCard" class="result-card">
+<hr style="border:0;border-top:1px solid #edf1f6;margin:20px 0">
+<div class="section-head"><div><h3 class="section-title" style="margin:0">导入执行进度</h3><p class="section-desc">逐条创建并实时记录 Nightingale API 的实际响应</p></div><span class="tag" id="importState" role="status" aria-live="polite">准备中</span></div>
+<div class="progress-head"><strong id="importProgressLabel">0 / 0 条已处理</strong><span id="importPercent">0%</span></div>
+<div class="progress-track" role="progressbar" id="importProgressBar" aria-label="规则导入进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="progress-fill" id="importProgressFill"></div></div>
+<div class="import-stats">
+<div class="import-stat"><strong id="importCreated" style="color:#098664">0</strong><span>API 创建成功</span></div>
+<div class="import-stat"><strong id="importSkipped" style="color:#8b6a24">0</strong><span>已存在，跳过</span></div>
+<div class="import-stat"><strong id="importFailed" style="color:#b42331">0</strong><span>创建失败 / 校验错误</span></div>
+<div class="import-stat"><strong id="importPending">0</strong><span>尚待处理</span></div>
+</div>
+<div class="import-current active" id="importCurrent" role="status" aria-live="polite">正在初始化导入请求…</div>
+<div id="importAlert" class="import-alert" role="alert"></div>
+<div class="import-toolbar">
+<div class="field"><label for="importSearch">查找导入记录</label><input class="control" id="importSearch" placeholder="搜索规则名称、原因或 Excel 行号"></div>
+<div class="field"><label for="importFilter">结果状态</label><select class="control" id="importFilter"><option value="all">全部结果</option><option value="created">创建成功</option><option value="skipped">同名跳过</option><option value="failed">失败 / 无效</option></select></div>
+<span class="spacer"></span>
+<button class="btn ghost small" id="downloadCsv" disabled>导出 CSV</button>
+<button class="btn soft small" id="downloadResult" disabled>下载完整 JSON</button>
+</div>
+<div class="import-table-wrap"><table class="import-table"><thead><tr><th>序号</th><th>Excel 行</th><th>规则名称</th><th>状态</th><th>说明</th></tr></thead><tbody id="importRows"><tr><td colspan="5" class="empty">导入开始后逐条展示结果</td></tr></tbody></table></div>
+<div class="import-count" id="importVisible">暂无记录</div>
+<p class="callout">创建成功表示 Nightingale API 接受请求，规则仍默认禁用；跳过表示同业务组存在同名规则。中断时部分规则可能已写入，请核对夜莺实际规则，不要立即重复导入。</p>
+</div>
 </div></section>
 <div class="callout" style="margin-top:8px">安全提示：本工具当前无独立登录鉴权，请仅部署在可信内网。API 返回创建成功不代表告警已启用或通知渠道已配置。</div>
 </main>
@@ -301,23 +333,126 @@ $("preview").onclick=async()=>{
  finally{button.disabled=false;update()}
 };
 function download(name,value){const blob=new Blob([JSON.stringify(value,null,2)],{type:"application/json"}),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),2000)}
+function downloadText(name,value,mime){const blob=new Blob([value],{type:mime}),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),2000)}
 $("export").onclick=()=>{if(preview)download("n9e-preview.json",{...preview,selected_rows:picks(),disabled_candidate_rows:[...paused],removed_rows:[...removed]})};
+let importJob=null;
+const resultType=status=>status==="created"?"created":status==="skipped"?"skipped":"failed";
+function resetImportJob(rows){
+ importJob={total:rows.length,processed:0,created:0,skipped:0,failed:0,items:[],phase:"running",current:"连接夜莺，读取现有规则以检查重复名称…",error:"",startedAt:new Date().toISOString(),endedAt:null,rows};
+ lastResult=null;
+ $("importSearch").value="";$("importFilter").value="all";
+ $("resultCard").classList.add("visible");
+ $("downloadCsv").disabled=true;$("downloadResult").disabled=true;
+ renderImportResults();
+ $("resultCard").scrollIntoView?.({behavior:"smooth",block:"start"});
+}
+function importEvent(event){
+ if(!importJob||!event||typeof event.type!=="string")return;
+ if(event.type==="started"){
+  if(Number.isInteger(event.total)&&event.total>=0)importJob.total=event.total;
+  importJob.current="已校验目标，准备处理 "+importJob.total+" 条规则";
+ }else if(event.type==="current"){
+  importJob.current="正在处理第 "+event.index+" / "+importJob.total+" 条："+String(event.name||"");
+ }else if(event.type==="item"&&event.item){
+  const item=event.item;
+  importJob.items.push({row:Number(item.row)||0,name:String(item.name||""),status:String(item.status||"failed"),message:String(item.message||"")});
+  importJob.processed=importJob.items.length;
+  importJob.created=importJob.items.filter(x=>x.status==="created").length;
+  importJob.skipped=importJob.items.filter(x=>x.status==="skipped").length;
+  importJob.failed=importJob.processed-importJob.created-importJob.skipped;
+  importJob.current="已处理 "+importJob.processed+" 条，正在等待下一条结果…";
+ }else if(event.type==="complete"){
+  importJob.phase="complete";importJob.current="所有规则处理结束";
+  importJob.endedAt=new Date().toISOString();
+ }else if(event.type==="error"){
+  importJob.phase="error";importJob.error=String(event.message||"导入请求异常");
+  importJob.current="执行已中止";importJob.endedAt=new Date().toISOString();
+ }
+ lastResult={total:importJob.total,processed:importJob.processed,created:importJob.created,skipped:importJob.skipped,failed:importJob.failed,completed:importJob.phase==="complete",error:importJob.error,started_at:importJob.startedAt,ended_at:importJob.endedAt,selected_rows:importJob.rows,items:importJob.items};
+ renderImportResults();
+}
+function renderImportResults(){
+ if(!importJob)return;
+ const job=importJob,percent=job.total?Math.min(100,Math.round(job.processed/job.total*100)):0;
+ const state=$("importState");
+ if(job.phase==="complete"){state.className="tag "+(job.failed?"warn":"success");state.textContent=job.failed?"已完成（含失败）":"已完成"}
+ else if(job.phase==="error"){state.className="tag error";state.textContent="已中断"}
+ else{state.className="tag";state.textContent="执行中"}
+ $("importProgressLabel").textContent=job.processed+" / "+job.total+" 条已处理";
+ $("importPercent").textContent=percent+"%";
+ $("importProgressBar").setAttribute("aria-valuenow",String(percent));
+ $("importProgressFill").style.width=percent+"%";
+ $("importProgressFill").className="progress-fill"+(job.phase==="complete"?" done":job.phase==="error"?" partial":"");
+ $("importCreated").textContent=job.created;
+ $("importSkipped").textContent=job.skipped;
+ $("importFailed").textContent=job.failed;
+ $("importPending").textContent=Math.max(0,job.total-job.processed);
+ $("importCurrent").textContent=job.current;
+ $("importCurrent").className="import-current"+(job.phase==="running"?" active":"");
+ $("importAlert").className="import-alert"+(job.phase==="error"?" visible":"");
+ $("importAlert").textContent=job.error?job.error+"\n已经完成的规则可能已写入夜莺；请核对实际状态后再决定是否重新运行。":"";
+ const q=$("importSearch").value.trim().toLowerCase(),filter=$("importFilter").value;
+ const matching=job.items.filter(x=>(filter==="all"||resultType(x.status)===filter)&&(!q||(x.name+" "+x.message+" "+x.row).toLowerCase().includes(q)));
+ // Keep the results table responsive even when importing large workbooks.
+ const shown=matching.slice(-200);
+ $("importRows").innerHTML=shown.map((x,i)=>{
+  const type=resultType(x.status);
+  const label=type==="created"?"成功":type==="skipped"?"跳过":x.status==="invalid"?"校验错误":"失败";
+  const badge=type==="created"?"success":type==="skipped"?"warn":"error";
+  return '<tr><td class="numcol">'+(matching.length-shown.length+i+1)+'</td><td class="numcol">'+x.row+'</td>'+
+   '<td class="import-rule">'+escapeHTML(x.name)+'</td><td><span class="tag '+badge+'">'+label+'</span></td><td class="import-message">'+escapeHTML(x.message)+'</td></tr>';
+ }).join("")||'<tr><td class="empty" colspan="5">当前状态下暂无匹配记录</td></tr>';
+ $("importVisible").textContent="匹配 "+matching.length+" 条结果"+(matching.length>200?"，显示最近 200 条；下载文件可查看全部":"");
+ $("downloadResult").disabled=job.items.length===0;
+ $("downloadCsv").disabled=job.items.length===0;
+}
+$("importSearch").oninput=renderImportResults;
+$("importFilter").onchange=renderImportResults;
 $("downloadResult").onclick=()=>{if(lastResult)download("n9e-import-result.json",lastResult)};
+$("downloadCsv").onclick=()=>{
+ if(!importJob||!importJob.items.length)return;
+ const cell=value=>{
+  let s=String(value??"");
+  if(/^[=+\-@\t\r]/.test(s))s="'"+s;
+  return '"'+s.replaceAll('"','""')+'"';
+ };
+ const rows=[["Excel行","规则名称","状态","说明"],...importJob.items.map(x=>[x.row,x.name,x.status,x.message])];
+ downloadText("n9e-import-result.csv","\uFEFF"+rows.map(r=>r.map(cell).join(",")).join("\r\n"),"text/csv;charset=utf-8");
+};
+async function consumeImportStream(response){
+ if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.error||"HTTP "+response.status)}
+ if(!response.body||!response.body.getReader)throw Error("浏览器不支持实时进度流，请使用最新版浏览器");
+ const reader=response.body.getReader(),decoder=new TextDecoder();
+ let buffer="",terminal=false;
+ while(true){
+  const {value,done}=await reader.read();
+  if(done)break;
+  buffer+=decoder.decode(value,{stream:true});
+  let newline;
+  while((newline=buffer.indexOf("\n"))!==-1){
+   const line=buffer.slice(0,newline).trim();buffer=buffer.slice(newline+1);
+   if(!line)continue;
+   const event=JSON.parse(line);
+   importEvent(event);
+   if(event.type==="complete"||event.type==="error")terminal=true;
+  }
+ }
+ const tail=(buffer+decoder.decode()).trim();
+ if(tail){const event=JSON.parse(tail);importEvent(event);if(event.type==="complete"||event.type==="error")terminal=true}
+ if(!terminal)throw Error("进度流意外结束；服务端可能仍在执行，请检查夜莺中的实际规则");
+}
 $("import").onclick=async()=>{
  if(!preview||!connectionOK||!$("confirm").checked||importing)return;
  const rows=picks();
  if(!rows.length||!confirm("向业务组 "+$("group").value+" 提交 "+rows.length+" 条规则？\n已有同名规则跳过，新建规则默认禁用。"))return;
- importing=true;render();
- $("resultCard").classList.add("visible");$("result").textContent="正在逐条导入，请勿关闭页面…";
+ importing=true;resetImportJob(rows);render();
  try{
-  const response=await fetch("/api/import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+  const response=await fetch("/api/import-stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
    url:$("url").value.trim(),token:$("token").value,group_id:Number($("group").value),datasource_id:Number($("datasource").value),
    preview_id:preview.preview_id,rows,confirm:true
   })});
-  const data=await response.json();if(!response.ok)throw Error(data.error||"导入失败");
-  lastResult=data;$("downloadResult").disabled=false;
-  $("result").textContent="API 接受："+data.created+" 条 · 跳过："+data.skipped+" 条 · 失败："+data.failed+" 条\n"+data.items.map(x=>x.status+" | "+x.name+" | "+x.message).join("\n");
- }catch(e){$("result").textContent="导入中止："+e.message}
+  await consumeImportStream(response);
+ }catch(e){importEvent({type:"error",message:e.message})}
  finally{importing=false;render()}
 };
 render();
