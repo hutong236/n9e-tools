@@ -115,3 +115,38 @@ docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.4.0
 - 这些操作只修改浏览器中的临时待导入清单，**绝不删除或启用夜莺已有规则**。新建告警规则仍是 `disabled=1`。
 - 连接测试成功后方可点击导入；变更 URL/Token/业务组/数据源会要求重新测试。测试结果暂不确认数据源 ID 的有效性。
 - 当前尚未在用户的 Nightingale 实例执行实际写入验收；建议先在测试业务组导入少量禁用规则。
+
+## GitHub Actions：手工打包 Linux x86 和 Mac ARM 二进制程序
+
+在 [Actions → Build downloadable binaries](https://github.com/hutong236/n9e-tools/actions/workflows/binary-release.yml) 中点击 **Run workflow**，选择 `main`，输入包名标签（默认 `v0.4.0`）。
+
+此任务与 Docker 镜像工作流相互独立，不会自动推送镜像或发布 GitHub Release。两台 GitHub Runner 分别原生编译：
+
+| 平台 | Runner | Rust target | 结果 |
+| --- | --- | --- | --- |
+| Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `n9e-tools-v0.4.0-linux-x86_64.tar.gz` |
+| macOS Apple Silicon | `macos-15`（ARM64） | `aarch64-apple-darwin` | `n9e-tools-v0.4.0-macos-arm64.tar.gz` |
+
+运行结束后，打开该次 Actions Run 页面底部的 **Artifacts** 下载对应平台构建产物。每个平台包含可执行程序 `n9e-tools`、README 和压缩包 SHA-256 校验文件。构建会执行 Rust 测试，并通过 `file` 命令检查二进制文件。
+
+Linux 安装示例：
+
+```bash
+tar -xzf n9e-tools-v0.4.0-linux-x86_64.tar.gz
+cd n9e-tools-v0.4.0-linux-x86_64
+chmod +x n9e-tools
+./n9e-tools
+```
+
+macOS Apple Silicon 安装示例：
+
+```bash
+tar -xzf n9e-tools-v0.4.0-macos-arm64.tar.gz
+cd n9e-tools-v0.4.0-macos-arm64
+chmod +x n9e-tools
+./n9e-tools
+```
+
+默认监听 `127.0.0.1:8088`。Linux 产物是 **glibc 动态链接**程序，不是 musl 静态可执行文件；在较老发行版运行前要核对 libc 兼容性。macOS 的 GitHub Actions 未签名二进制文件可能受到 Gatekeeper 限制，请仅对经过核实的构建产物按组织安全策略处理。当前 Web 服务没有独立的登录鉴权，不要直接对公网开放。
+
+> 本工作流仅负责打包和上传 GitHub Actions Artifacts，是否构建成功以手工运行后对应的 Actions Job 状态为准。
