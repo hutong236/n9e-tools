@@ -197,7 +197,9 @@ jobs:
 
           All three packages include the executable and README.md (Windows: n9e-tools.exe).
           SHA-256 checksum files are provided for verification.
-          Run ./n9e-tools after extraction. Default address: http://127.0.0.1:8088
+          Linux/macOS: run ./n9e-tools after extraction.
+          Windows: run .\\n9e-tools.exe after extraction.
+          Default address: http://127.0.0.1:8088
 
           Source commit: $GITHUB_SHA
           EOF
