@@ -148,9 +148,9 @@ mod integration_tests {
        write!(z,"<c r=\"E{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"I{row}\" t=\"inlineStr\"><is><t>{}</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
       }else if idx==3 {
        let style=if i<54 {1}else{0};
-       write!(z,"<c r=\"A{row}\" s=\"{style}\"><v>{}</v></c><c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"H{row}\" t=\"inlineStr\"><is><t>vector(1) > 0</t></is></c>",i+1).unwrap();
+       write!(z,"<c r=\"A{row}\" s=\"{style}\"><v>{}</v></c><c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"H{row}\" t=\"inlineStr\"><is><t>vector(1) > 0</t></is></c><c r=\"I{row}\" t=\"inlineStr\"><is><t>vector(2) > 0</t></is></c><c r=\"M{row}\" t=\"inlineStr\"><is><t>待确认</t></is></c>",i+1).unwrap();
       }else{
-       write!(z,"<c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"G{row}\" t=\"inlineStr\"><is><t>{}</t></is></c><c r=\"J{row}\" t=\"inlineStr\"><is><t>5 分钟</t></is></c><c r=\"K{row}\" t=\"inlineStr\"><is><t>60 分钟</t></is></c><c r=\"L{row}\" t=\"inlineStr\"><is><t>0（不限）</t></is></c><c r=\"M{row}\" t=\"inlineStr\"><is><t>env=prod</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
+       write!(z,"<c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"G{row}\" t=\"inlineStr\"><is><t>{}</t></is></c><c r=\"J{row}\" t=\"inlineStr\"><is><t>5 分钟</t></is></c><c r=\"K{row}\" t=\"inlineStr\"><is><t>60 分钟</t></is></c><c r=\"L{row}\" t=\"inlineStr\"><is><t>0（不限）</t></is></c><c r=\"M{row}\" t=\"inlineStr\"><is><t>host={{{{主机名}}}}</t></is></c><c r=\"O{row}\" t=\"inlineStr\"><is><t>待确认</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
       }
       write!(z,"</row>").unwrap();
      }
@@ -170,8 +170,8 @@ mod integration_tests {
   assert_eq!(preview.rules[0].recovery_seconds,300);
   assert_eq!(preview.rules[0].repeat_minutes,60);
   assert_eq!(preview.rules[0].max_repeat_count,0);
-  assert_eq!(preview.rules[0].label_requirements,"env=prod");
+  assert_eq!(preview.rules[0].label_requirements,"host={{主机名}}");
   assert!(preview.rules[0].issues.iter().all(|i|i.level!="error"));
-  assert!(preview.rules[0].issues.is_empty(),"辅助标签及通知信息不应生成规则校验警告");
+  assert!(preview.rules.iter().all(|r|r.issues.is_empty()),"辅助标签占位符、通知待确认与建议PromQL差异不应生成规则校验警告");
  }
 }
