@@ -236,6 +236,9 @@ fn make_overwrite_payload(original:&Value,rule:&excel::Rule,group_id:u64,datasou
  query.insert("prom_ql".into(),Value::String(rule.promql.clone()));
  query.insert("severity".into(),serde_json::json!(1));
  obj.insert("rule_config".into(),config);
+ // Nightingale FE2DB prioritizes legacy prom_ql when non-empty and rebuilds rule_config.
+ // Clear the deprecated shadow field so the reviewed single-query rule_config survives.
+ obj.insert("prom_ql".into(),Value::String(String::new()));
  obj.insert("note".into(),Value::String(rule.note.clone()));
  obj.insert("prom_for_duration".into(),serde_json::json!(rule.duration_seconds));
  obj.insert("prom_eval_interval".into(),serde_json::json!(30));
@@ -254,7 +257,7 @@ fn make_overwrite_payload(original:&Value,rule:&excel::Rule,group_id:u64,datasou
  Ok(updated)
 }
 fn overwrite_changes(original:&Value,updated:&Value)->Vec<OverwriteChange>{
- const FIELDS:&[&str]=&["rule_config","note","prom_for_duration","prom_eval_interval","recover_duration","notify_repeat_step","notify_max_number","datasource_queries","append_tags","annotations"];
+ const FIELDS:&[&str]=&["rule_config","prom_ql","note","prom_for_duration","prom_eval_interval","recover_duration","notify_repeat_step","notify_max_number","datasource_queries","append_tags","annotations"];
  FIELDS.iter().filter_map(|key|{
   let a=original.get(key); let b=updated.get(key);
   if a==b{return None}
@@ -512,6 +515,7 @@ mod tests {
   assert_eq!(updated["callbacks"],serde_json::json!(["https://example.net"]));
   assert_eq!(updated["enable_stimes"],serde_json::json!(["08:00"]));
   assert_eq!(updated["rule_config"]["queries"][0]["prom_ql"],"up == 0");
+  assert_eq!(updated["prom_ql"],"");
   assert_eq!(updated["rule_config"]["queries"][0]["severity"],1);
   assert_eq!(updated["append_tags"],serde_json::json!(["team=ops"]));
   assert_eq!(updated["annotations"]["owner"],"keep");
