@@ -221,7 +221,12 @@ fn alert_identity(rule:&Value,id:u64,name:&str,group_id:u64)->bool{
  &&rule.get("cate").and_then(Value::as_str)==Some("prometheus")
  &&rule.get("prod").and_then(Value::as_str).map(|p|p=="metric"||p=="").unwrap_or(true)
 }
+fn overwrite_target_disabled(rule:&Value)->bool{
+ // Strictly require the numeric 1, not a missing, null, string, or bool value.
+ rule.get("disabled").and_then(Value::as_u64)==Some(1)
+}
 fn make_overwrite_payload(original:&Value,rule:&excel::Rule,group_id:u64,datasource_id:u64,params:Option<&RuleParams>)->Result<Value,String>{
+ if !overwrite_target_disabled(original){return Err("目标规则必须为 Disabled（disabled=1）；请先在 Nightingale 停用该规则".into())}
  let (recovery,repeat,count,tags)=checked_params(rule,params)?;
  let mut updated=original.clone();
  let obj=updated.as_object_mut().ok_or("夜莺原规则不是JSON对象")?;
@@ -292,6 +297,7 @@ async fn overwrite_prepare(
  let id=matches[0].get("id").and_then(Value::as_u64).filter(|x|*x>0).ok_or_else(||error(StatusCode::BAD_GATEWAY,"目标规则缺少有效ID"))?;
  let current=fetch_rule_detail(&client,&base,&req.token,id).await?;
  if !alert_identity(&current,id,&rule.name,req.group_id){return Err(error(StatusCode::CONFLICT,"现有规则ID、名称或业务组不一致，覆盖已取消"))}
+ if !overwrite_target_disabled(&current){return Err(error(StatusCode::CONFLICT,"禁止覆盖：夜莺现有规则必须为 Disabled（disabled=1）。请先在 Nightingale 停用规则，再重新点击覆盖"))}
  let updated=make_overwrite_payload(&current,&rule,req.group_id,req.datasource_id,req.parameters.as_ref()).map_err(|e|error(StatusCode::BAD_REQUEST,e))?;
  let changes=overwrite_changes(&current,&updated);
  if changes.is_empty(){return Err(error(StatusCode::CONFLICT,"现有配置与Excel配置一致，无需覆盖"))}
@@ -326,6 +332,7 @@ async fn overwrite_execute(
  let latest=fetch_rule_detail(&client,&base,&req.token,plan.rule_id).await?;
  if latest!=plan.original{return Err(error(StatusCode::CONFLICT,"夜莺规则自预览后发生变化，禁止覆盖；请重新查看差异"))}
  if !alert_identity(&latest,plan.rule_id,&plan.name,plan.group_id){return Err(error(StatusCode::CONFLICT,"规则身份检查失败"))}
+ if !overwrite_target_disabled(&latest){return Err(error(StatusCode::CONFLICT,"禁止覆盖：目标规则目前不是 Disabled（disabled=1），请先在 Nightingale 停用并重新确认"))}
  let uri=format!("{base}/api/n9e/busi-group/{}/alert-rule/{}",plan.group_id,plan.rule_id);
  let response=client.put(&uri).header("X-User-Token",&req.token).json(&plan.updated).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,format!("覆盖请求失败：{e}")))?;
  api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
@@ -492,6 +499,17 @@ mod tests {
   assert!(checked_params(&rule,Some(&invalid)).is_err());
  }
  #[test]
+ fn force_overwrite_requires_existing_rule_disabled(){
+  let mut rule=serde_json::json!({"id":88,"name":"test","group_id":5,"cate":"prometheus","prod":"metric","disabled":1});
+  assert!(overwrite_target_disabled(&rule));
+  rule["disabled"]=serde_json::json!(0);
+  assert!(!overwrite_target_disabled(&rule));
+  rule["disabled"]=serde_json::json!("1");
+  assert!(!overwrite_target_disabled(&rule));
+  rule.as_object_mut().unwrap().remove("disabled");
+  assert!(!overwrite_target_disabled(&rule));
+ }
+ #[test]
  fn overwrite_payload_preserves_runtime_state_and_only_one_query(){
   let rule=excel::Rule{
    row:5,name:"CPU High".into(),group:String::new(),exporter:String::new(),category:String::new(),
@@ -502,7 +520,7 @@ mod tests {
    max_repeat:"2".into(),recovery_seconds:0,repeat_minutes:10,max_repeat_count:2,issues:vec![]
   };
   let original=serde_json::json!({"id":19,"name":"CPU High","group_id":5,
-   "cate":"prometheus","prod":"metric","disabled":0,"notify_rule_ids":[99],
+   "cate":"prometheus","prod":"metric","disabled":1,"notify_rule_ids":[99],
    "callbacks":["https://example.net"],"enable_stimes":["08:00"],
    "rule_config":{"queries":[{"prom_ql":"up > 0","severity":2}]},
    "append_tags":["original=tag"],"annotations":{"owner":"keep","summary":"old"}});
@@ -510,7 +528,7 @@ mod tests {
   let updated=make_overwrite_payload(&original,&rule,5,7,Some(&params)).unwrap();
   assert!(alert_identity(&original,19,"CPU High",5));
   assert!(!alert_identity(&original,18,"CPU High",5));
-  assert_eq!(updated["disabled"],0);
+  assert_eq!(updated["disabled"],1);
   assert_eq!(updated["notify_rule_ids"],serde_json::json!([99]));
   assert_eq!(updated["callbacks"],serde_json::json!(["https://example.net"]));
   assert_eq!(updated["enable_stimes"],serde_json::json!(["08:00"]));
@@ -523,6 +541,9 @@ mod tests {
   let mut multiple=original.clone();
   multiple["rule_config"]["queries"]=serde_json::json!([{"prom_ql":"up","severity":1},{"prom_ql":"down","severity":1}]);
   assert!(make_overwrite_payload(&multiple,&rule,5,7,Some(&params)).is_err());
+  let mut enabled=original.clone();
+  enabled["disabled"]=serde_json::json!(0);
+  assert!(make_overwrite_payload(&enabled,&rule,5,7,Some(&params)).is_err());
  }
  #[test]
  fn existing_rule_list_shapes(){
@@ -551,7 +572,7 @@ mod http_integration_tests {
   use std::sync::atomic::{AtomicUsize,Ordering};
   let current=Arc::new(Mutex::new(serde_json::json!({
    "id":98,"name":"CPU High","group_id":5,"cate":"prometheus","prod":"metric",
-   "disabled":0,"notify_rule_ids":[13],"append_tags":["team=old"],
+   "disabled":1,"notify_rule_ids":[13],"append_tags":["team=old"],
    "rule_config":{"queries":[{"prom_ql":"up == 1","severity":1}]},
    "annotations":{"summary":"old"},"prom_for_duration":60,
    "prom_eval_interval":30,"recover_duration":0,"notify_repeat_step":0,"notify_max_number":0,
@@ -611,7 +632,7 @@ mod http_integration_tests {
   assert_eq!(reply["verified"],true);
   assert_eq!(writes.load(Ordering::SeqCst),1,"one update and no deletes");
   let saved=current.lock().unwrap();
-  assert_eq!(saved["disabled"],0);
+  assert_eq!(saved["disabled"],1);
   assert_eq!(saved["notify_rule_ids"],serde_json::json!([13]));
   assert_eq!(saved["append_tags"],serde_json::json!(["team=ops"]));
   assert_eq!(saved["rule_config"]["queries"][0]["prom_ql"],"up == 0");
