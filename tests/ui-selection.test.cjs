@@ -260,3 +260,30 @@ test("invert selection ignores paused and invalid rules",()=>{
  assert.equal(ui.selected.has(100),false);
  assert.equal(ui.selected.size,0);
 });
+
+test("placeholder example is not treated as configured append_tags",()=>{
+ assert.doesNotMatch(html,/id="paramTags"[^>]*placeholder="team=ops/);
+ assert.match(script,/append_tags:\[\],labels_confirmed:false/);
+});
+test("import event keeps tag readback audit information",()=>{
+ const nodes=new Map();
+ function node(id){
+  if(!nodes.has(id))nodes.set(id,{
+   value:id==="pageSize"?"20":id==="filter"||id==="importFilter"?"all":"",
+   textContent:"",innerHTML:"",disabled:false,checked:false,className:"",
+   style:{},setAttribute(){},scrollIntoView(){},
+   classList:{add(){},remove(){}},addEventListener(){},appendChild(){},showModal(){},close(){}
+  });
+  return nodes.get(id);
+ }
+ const doc={getElementById:node,createElement(){return {value:"",textContent:""}}};
+ const ui=new Function("document","confirm","alert","fetch",script+
+  "\nreturn {resetImportJob,importEvent,getJob:()=>importJob};")(doc,()=>true,()=>{},async()=>{throw Error("unwanted network")});
+ ui.resetImportJob([5]);
+ ui.importEvent({type:"item",item:{row:5,name:"test",status:"created",message:"标签未发现",
+  tags_requested:["team=ops"],tags_verification:"mismatch"}});
+ assert.deepEqual(ui.getJob().items[0].tags_requested,["team=ops"]);
+ assert.equal(ui.getJob().items[0].tags_verification,"mismatch");
+ assert.match(node("importRows").innerHTML,/标签待核验/);
+ assert.equal(node("importCreated").textContent,1);
+});
