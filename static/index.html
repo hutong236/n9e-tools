@@ -238,7 +238,7 @@ function filtersMatch(r){
 }
 function filteredRows(){return preview?preview.rules.filter(r=>!removed.has(r.row)&&filtersMatch(r)):[]}
 function filteredSelected(){return filteredRows().filter(r=>eligible(r)&&selected.has(r.row))}
-function markTestInvalid(){connectionOK=false;discovered=null;chosenGroup=null;chosenDatasource=null;$("group").value="";$("datasource").value="";$("connectionStatus").className="statusline";$("connectionStatus").textContent="连接信息已变更，请重新测试并选择";update()}
+function markTestInvalid(){connectionOK=false;discovered=null;chosenGroup=null;chosenDatasource=null;$("group").value="";$("datasource").value="";$("connectionStatus").className="statusline";$("connectionStatus").textContent="连接信息已变更，请重新测试并选择";render()}
 function update(){
  const count=picks().length, visible=filteredRows(), inScope=filteredSelected().length;
  $("statTotal").textContent=preview?preview.rules.length:"—";
@@ -384,6 +384,7 @@ function closeOverwriteDialog(){
 }
 $("overwriteClose").onclick=closeOverwriteDialog;
 $("overwriteCancel").onclick=closeOverwriteDialog;
+$("overwriteDialog").addEventListener("cancel",e=>{if(overwriteBusy)e.preventDefault()});
 $("overwriteDialog").addEventListener("close",()=>{if(!overwriteBusy)overwritePending=null});
 $("overwriteRisk").onchange=renderOverwriteSteps;
 $("overwriteTyped").oninput=renderOverwriteSteps;
@@ -501,7 +502,7 @@ $("confirmTargets").onclick=()=>{
  connectionOK=true;
  $("connectionStatus").className="statusline success";
  $("connectionStatus").textContent="连接成功 · 业务组："+g.name+" (#"+g.id+") · 数据源："+d.name+" (#"+d.id+")";
- closeTargets();update();
+ closeTargets();render();
 };
 $("testConnection").onclick=async()=>{
  if(discoveryBusy)return;
