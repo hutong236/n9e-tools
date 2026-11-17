@@ -152,7 +152,7 @@ mod integration_tests {
        let style=if i<54 {1}else{0};
        write!(z,"<c r=\"A{row}\" s=\"{style}\"><v>{}</v></c><c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"H{row}\" t=\"inlineStr\"><is><t>vector(1) > 0</t></is></c>",i+1).unwrap();
       }else{
-       write!(z,"<c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"G{row}\" t=\"inlineStr\"><is><t>{}</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
+       write!(z,"<c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"G{row}\" t=\"inlineStr\"><is><t>{}</t></is></c><c r=\"J{row}\" t=\"inlineStr\"><is><t>5 分钟</t></is></c><c r=\"K{row}\" t=\"inlineStr\"><is><t>60 分钟</t></is></c><c r=\"L{row}\" t=\"inlineStr\"><is><t>0（不限）</t></is></c><c r=\"M{row}\" t=\"inlineStr\"><is><t>env=prod</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
       }
       write!(z,"</row>").unwrap();
      }
@@ -169,5 +169,10 @@ mod integration_tests {
   assert_eq!(preview.rules.iter().filter(|r|r.duration_seconds==0).count(),11);
   assert_eq!(preview.rules[0].promql,"vector(1) > 0");
   assert_eq!(preview.rules[103].row,108);
+  assert_eq!(preview.rules[0].recovery_seconds,300);
+  assert_eq!(preview.rules[0].repeat_minutes,60);
+  assert_eq!(preview.rules[0].max_repeat_count,0);
+  assert_eq!(preview.rules[0].label_requirements,"env=prod");
+  assert!(preview.rules[0].issues.iter().all(|i|i.level!="error"));
  }
 }
