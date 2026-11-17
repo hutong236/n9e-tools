@@ -283,7 +283,7 @@ async fn overwrite_prepare(
  let response=client.get(&list_url).header("X-User-Token",&req.token).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,e.to_string()))?;
  let value=api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  let list=extract_list(&value).map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
- let matches:Vec<&Value>=list.iter().filter(|x|x.get("name").and_then(Value::as_str)==Some(&rule.name)).collect();
+ let matches:Vec<&Value>=list.iter().filter(|x|x.get("name").and_then(Value::as_str)==Some(rule.name.as_str())).collect();
  if matches.len()!=1{return Err(error(StatusCode::CONFLICT,format!("同名规则匹配到 {} 条，必须恰好一条才允许覆盖",matches.len())))}
  let id=matches[0].get("id").and_then(Value::as_u64).filter(|x|*x>0).ok_or_else(||error(StatusCode::BAD_GATEWAY,"目标规则缺少有效ID"))?;
  let current=fetch_rule_detail(&client,&base,&req.token,id).await?;
@@ -298,7 +298,7 @@ async fn overwrite_prepare(
   if store.len()>200{store.clear()}
   store.insert(ticket.clone(),OverwritePlan{
    created:Instant::now(),group_id:req.group_id,datasource_id:req.datasource_id,row:req.row,
-   preview_id:req.preview_id,url:base,rule_id:id,name:rule.name,original:current,updated
+   preview_id:req.preview_id,url:base,rule_id:id,name:rule.name.clone(),original:current,updated
   });
  }
  Ok(Json(OverwritePrepareResult{ticket,rule_id:id,name:rule.name.clone(),expires_seconds:300,changes,
