@@ -7,6 +7,7 @@ use excel::Preview;
 use tokio_stream::{wrappers::ReceiverStream,StreamExt};
 type AppState=Arc<Mutex<HashMap<String,Preview>>>;
 type OverwriteState=Arc<Mutex<HashMap<String,OverwritePlan>>>;
+type OverwriteWriteLock=Arc<tokio::sync::Mutex<()>>;
 struct OverwritePlan {
  created:Instant, group_id:u64, datasource_id:u64, row:u32, preview_id:String,
  url:String, rule_id:u64, name:String, original:Value, updated:Value,
@@ -305,7 +306,7 @@ async fn overwrite_prepare(
   preserved:vec!["原规则启用/禁用状态".into(),"通知关联、回调与生效时间段".into(),"其他Excel未管理的夜莺配置".into()]}))
 }
 async fn overwrite_execute(
- Extension(tickets):Extension<OverwriteState>,Json(req):Json<OverwriteExecuteRequest>
+ Extension(tickets):Extension<OverwriteState>,Extension(write_lock):Extension<OverwriteWriteLock>,Json(req):Json<OverwriteExecuteRequest>
 )->Result<Json<Value>,(StatusCode,Json<Value>)>{
  if !req.confirm_overwrite||req.token.trim().is_empty(){return Err(error(StatusCode::BAD_REQUEST,"覆盖必须完成最终确认"))}
  // Remove BEFORE network operations: a ticket can never be replayed, even if an update fails.
@@ -317,6 +318,7 @@ async fn overwrite_execute(
   plan.preview_id!=req.preview_id||plan.row!=req.row||plan.rule_id!=req.expected_rule_id||
   req.typed_name!=plan.name
  {return Err(error(StatusCode::CONFLICT,"覆盖目标与确认预览不一致，操作已取消"))}
+ let _write_guard=write_lock.lock().await;
  let client=reqwest::Client::builder().timeout(Duration::from_secs(20)).redirect(reqwest::redirect::Policy::none()).build().map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
  let latest=fetch_rule_detail(&client,&base,&req.token,plan.rule_id).await?;
  if latest!=plan.original{return Err(error(StatusCode::CONFLICT,"夜莺规则自预览后发生变化，禁止覆盖；请重新查看差异"))}
@@ -435,7 +437,8 @@ async fn import_stream(State(state):State<AppState>,Json(req):Json<ImportRequest
  tracing_subscriber::fmt::init();
  let state:AppState=Arc::new(Mutex::new(HashMap::new()));
  let overwrite_state:OverwriteState=Arc::new(Mutex::new(HashMap::new()));
- let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).route("/api/import-stream",post(import_stream)).route("/api/overwrite/prepare",post(overwrite_prepare)).route("/api/overwrite/execute",post(overwrite_execute)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state).layer(Extension(overwrite_state));
+ let overwrite_write_lock:OverwriteWriteLock=Arc::new(tokio::sync::Mutex::new(()));
+ let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).route("/api/import-stream",post(import_stream)).route("/api/overwrite/prepare",post(overwrite_prepare)).route("/api/overwrite/execute",post(overwrite_execute)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state).layer(Extension(overwrite_state)).layer(Extension(overwrite_write_lock));
  let bind=std::env::var("BIND").unwrap_or("127.0.0.1:8088".into());
  let addr:SocketAddr=bind.parse().expect("BIND must be IP:port");
  let listener=tokio::net::TcpListener::bind(addr).await.unwrap();
