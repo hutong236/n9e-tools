@@ -7,7 +7,36 @@ use excel::Preview;
 use tokio_stream::{wrappers::ReceiverStream,StreamExt};
 type AppState=Arc<Mutex<HashMap<String,Preview>>>;
 
-#[derive(Clone,Deserialize)]struct ImportRequest { url:String,token:String,group_id:u64,datasource_id:u64,preview_id:String,rows:Vec<u32>,confirm:bool }
+#[derive(Clone,Deserialize,Default)]
+struct RuleParams {
+ recover_duration:Option<u64>,
+ notify_repeat_step:Option<u64>,
+ notify_max_number:Option<u64>,
+ label_requirements:Option<String>,
+ #[serde(default)] append_tags:Vec<String>,
+}
+#[derive(Clone,Deserialize)]struct ImportRequest {
+ url:String,token:String,group_id:u64,datasource_id:u64,preview_id:String,rows:Vec<u32>,confirm:bool,
+ #[serde(default)] parameters:HashMap<u32,RuleParams>
+}
+fn validate_append_tag(tag:&str)->bool{
+ let Some((key,value))=tag.split_once('=') else {return false};
+ !key.is_empty()&&!value.is_empty()&&key.len()<=64&&value.len()<=128
+ &&key.chars().enumerate().all(|(i,c)|c.is_ascii_alphanumeric()||c=='_'||(i>0&&c=='.'))
+ &&value.chars().all(|c|c.is_ascii_alphanumeric()||"_-.:/".contains(c))
+}
+fn checked_params(rule:&excel::Rule,override_value:Option<&RuleParams>)->Result<(u64,u64,u64,Vec<String>),String>{
+ let recovery=override_value.and_then(|v|v.recover_duration).unwrap_or(rule.recovery_seconds);
+ let repeat=override_value.and_then(|v|v.notify_repeat_step).unwrap_or(rule.repeat_minutes);
+ let count=override_value.and_then(|v|v.notify_max_number).unwrap_or(rule.max_repeat_count);
+ if recovery>86400{return Err("留观时长超过24小时限制".into())}
+ if repeat>10080{return Err("重复通知间隔超过7天限制".into())}
+ if count>10000{return Err("最大重复次数超过10000限制".into())}
+ let tags=override_value.map(|x|x.append_tags.clone()).unwrap_or_default();
+ if tags.len()>32||tags.iter().any(|t|!validate_append_tag(t)){return Err("附加标签格式不正确：仅允许32个以内的静态 key=value；不允许动态模板".into())}
+ if let Some(text)=override_value.and_then(|x|x.label_requirements.as_ref()){if text.chars().count()>4000{return Err("采集侧标签要求文本过长".into())}}
+ Ok((recovery,repeat,count,tags))
+}
 #[derive(Deserialize)]struct TestConnectionRequest { url:String,token:String,group_id:u64,datasource_id:u64 }
 #[derive(Serialize)]struct ConnectionResult { connected:bool, message:String, existing_rules:usize, group_id:u64, datasource_id:u64, datasource_checked:bool }
 
@@ -136,6 +165,9 @@ async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync
  let existing=api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  let existing=extract_list(&existing).map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  let mut names:HashSet<String>=existing.iter().filter_map(|x|x.get("name").and_then(Value::as_str).map(str::to_owned)).collect();
+ for r in &rules {
+  checked_params(r,req.parameters.get(&r.row)).map_err(|e|error(StatusCode::BAD_REQUEST,format!("规则 {} 参数错误：{e}",r.name)))?;
+ }
  let total=rules.len();
  emit_update(&updates,serde_json::json!({"type":"started","total":total})).await;
  let mut results=ImportResult{created:0,skipped:0,failed:0,items:vec![]};
@@ -146,6 +178,7 @@ async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync
   }else if excel::seconds(&r.duration).is_none()||r.promql.is_empty()||r.name.is_empty()||r.issues.iter().any(|i|i.level=="error"){
    ResultRow{row:r.row,name:r.name.clone(),status:"invalid".into(),message:"规则校验不通过".into()}
   }else{
+   let (recovery,repeat,count,tags)=checked_params(r,req.parameters.get(&r.row)).expect("validated before import");
    let payload=serde_json::json!({
     "name":r.name,"note":r.note,
     "group_id":req.group_id,"datasource_queries":[{"match_type":0,"op":"in","values":[req.datasource_id]}],
@@ -154,9 +187,9 @@ async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync
     "enable_stimes":["00:00"],"enable_etimes":["00:00"],
     "enable_days_of_weeks":[["0","1","2","3","4","5","6"]],
     "annotations":{"summary":r.summary,"description":r.description,"suggestion":r.suggestion},
-    "append_tags":[],"notify_rule_ids":[],
+    "append_tags":tags,"notify_rule_ids":[],
     "rule_config":{"queries":[{"prom_ql":r.promql,"severity":1}]},
-    "notify_repeat_step":0,"notify_max_number":0,"recover_duration":0
+    "notify_repeat_step":repeat,"notify_max_number":count,"recover_duration":recovery
    });
    let res=client.post(&uri).header("X-User-Token",&req.token).json(&vec![payload]).send().await;
    let outcome=match res{Ok(response)=>api_json(response).await.and_then(|v|creation_result(&v,&r.name)),Err(e)=>Err(e.to_string())};
@@ -219,6 +252,13 @@ mod tests {
   assert!(creation_result(&serde_json::json!({"dat":{"example":""},"err":null}),"example").is_ok());
   assert!(creation_result(&serde_json::json!({"dat":{"example":"rule already exists"}}),"example").is_err());
   assert!(creation_result(&serde_json::json!({"dat":{}}),"example").is_err());
+ }
+ #[test]
+ fn validates_rule_static_tags(){
+  assert!(validate_append_tag("team=ops"));
+  assert!(!validate_append_tag("host={{主机名}}"));
+  assert!(!validate_append_tag("env=prod;foo=bar"));
+  assert!(!validate_append_tag("bad key=x"));
  }
  #[test]
  fn existing_rule_list_shapes(){
@@ -312,7 +352,7 @@ mod http_integration_tests {
    duration:"0m".into(),duration_seconds:0,suggested_duration:"1m".into(),
    summary:"test".into(),description:String::new(),suggestion:String::new(),
    note:String::new(),notification:String::new(),label_requirements:String::new(),
-   recovery:String::new(),repeat:String::new(),issues:Vec::<Issue>::new()
+   recovery:String::new(),repeat:String::new(),max_repeat:String::new(),recovery_seconds:300,repeat_minutes:60,max_repeat_count:0,issues:Vec::<Issue>::new()
   };
   let state:AppState=Arc::new(Mutex::new(HashMap::new()));
   state.lock().unwrap().insert("fixture".into(),Preview{
@@ -321,7 +361,7 @@ mod http_integration_tests {
   });
   let request=ImportRequest{
    url:format!("http://{addr}"),token:"test-token".into(),group_id:1,datasource_id:3,
-   preview_id:"fixture".into(),rows:vec![5,6],confirm:true
+   preview_id:"fixture".into(),rows:vec![5,6],confirm:true,parameters:HashMap::new()
   };
   let result=import(State(state.clone()),Json(request.clone())).await.unwrap().0;
   assert_eq!(result.created,1);
