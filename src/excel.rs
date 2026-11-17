@@ -57,6 +57,12 @@ fn index_by_name(rows:&Rows,col:&str)->HashMap<String,HashMap<String,String>>{ro
 // Locate the two Excel metadata columns by their header text, not assumed column positions.
 // Templates may put them on different sheets or columns; never confuse them with the
 // hardcoded Nightingale severity used when creating an alert.
+// Summary rows are not alert rules even when column B contains a count.
+// Match the dedicated marker in column A only, so a real rule name
+// containing "合计" in column B is not silently dropped.
+fn is_summary_row(row:&HashMap<String,String>)->bool{
+ get(row,"A").trim()=="合计"
+}
 fn metadata_header(rows:&Rows,label:&str)->Option<String>{
  rows.iter().filter(|r|get(r,"#row").parse::<u32>().unwrap_or(u32::MAX)<5)
   .find_map(|r|r.iter().find_map(|(col,value)|{
@@ -101,7 +107,7 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  let mut rules=Vec::new();let mut all=0;
  for r in details{
   let rn=get(r,"#row").parse::<u32>().unwrap_or(0);
-  if rn<5||get(r,"B").is_empty(){continue}all+=1;
+  if rn<5||get(r,"B").trim().is_empty()||is_summary_row(r){continue}all+=1;
   let name=get(r,"B").trim().to_string();let p=params.get(&name);let o=overview.get(&name);
   let v=|m:Option<&HashMap<String,String>>,key:&str|m.map(|r|get(r,key).to_string()).unwrap_or_default();
   let orig=v(p,"G");let overview_d=v(o,"I");let duration=if orig.is_empty(){overview_d.clone()}else{orig.clone()};
@@ -137,6 +143,12 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
 #[cfg(test)]mod tests{use super::*;
  #[test]fn durations(){assert_eq!(seconds("1m"),Some(60));assert_eq!(seconds("2 分钟"),Some(120));assert_eq!(seconds(""),None);assert_eq!(seconds("0m"),Some(0));assert_eq!(repeat_count("0（不限）"),Some(0));assert_eq!(repeat_count("3"),Some(3));assert_eq!(repeat_count("无限"),None);}
  #[test]fn red(){assert!(is_red("FFFF0000"));assert!(!is_red("FFD6E4F0"));}
+ #[test]fn summary_row_marker_does_not_exclude_genuine_rule_names(){
+  let summary=HashMap::from([("A".to_string()," 合计 ".to_string()),("B".to_string(),"104 条严重告警规则".to_string())]);
+  assert!(is_summary_row(&summary));
+  let normal=HashMap::from([("A".to_string(),"105".to_string()),("B".to_string(),"ipmi_合计功率异常".to_string())]);
+  assert!(!is_summary_row(&normal));
+ }
  #[test]fn finds_excel_level_and_severity_headers(){
   let rows=vec![
    HashMap::from([("#row".into(),"3".into()),("K".into(),"级别".into()),("L".into(),"严重程度".into())]),
@@ -189,6 +201,11 @@ mod integration_tests {
       }
       write!(z,"</row>").unwrap();
      }
+     if idx==3 {
+      // The actual workbook has a merged summary row at Excel row 109.
+      // Column B is populated but it must not count as an alert rule.
+      write!(z,"<row r=\"109\"><c r=\"A109\" t=\"inlineStr\"><is><t>合计</t></is></c><c r=\"B109\" t=\"inlineStr\"><is><t>104 条严重告警规则</t></is></c><c r=\"C109\" t=\"inlineStr\"><is><t>20 个告警分组</t></is></c></row>").unwrap();
+     }
     }
     write!(z,"</sheetData></worksheet>").unwrap();
    }
@@ -202,6 +219,7 @@ mod integration_tests {
   assert_eq!(preview.rules.iter().filter(|r|r.duration_seconds==0).count(),11);
   assert_eq!(preview.rules[0].promql,"vector(1) > 0");
   assert_eq!(preview.rules[103].row,108);
+  assert!(!preview.rules.iter().any(|r|r.row==109||r.name.contains("104 条严重告警规则")));
   assert_eq!(preview.rules[0].recovery_seconds,300);
   assert_eq!(preview.rules[0].repeat_minutes,60);
   assert_eq!(preview.rules[0].max_repeat_count,0);
