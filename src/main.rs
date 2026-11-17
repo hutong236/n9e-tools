@@ -373,6 +373,22 @@ mod http_integration_tests {
   assert_eq!(result.datasources[0].kind,"prometheus");
  }
  #[tokio::test]
+ async fn verifies_static_tags_from_nightingale_readback(){
+  let mock=Router::new().route("/api/n9e/busi-group/1/alert-rules",
+   get(||async{Json(serde_json::json!({"dat":[{"name":"created-rule","append_tags":["team=ops","env=prod"]}],"err":null}))}));
+  let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let addr=listener.local_addr().unwrap();
+  tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
+  let client=reqwest::Client::new();
+  let uri=format!("http://{addr}/api/n9e/busi-group/1/alert-rules");
+  let (kind,message)=check_created_tags(&client,&uri,"test","created-rule",&["team=ops".into()]).await;
+  assert_eq!(kind,"verified");
+  assert!(message.contains("成功"));
+  let (kind,message)=check_created_tags(&client,&uri,"test","created-rule",&["service=missing".into()]).await;
+  assert_eq!(kind,"mismatch");
+  assert!(message.contains("service=missing"));
+ }
+ #[tokio::test]
  async fn test_connection_validates_accessible_group() {
   let mock=Router::new().route("/api/n9e/busi-group/2/alert-rules",
    get(|headers:axum::http::HeaderMap| async move {
