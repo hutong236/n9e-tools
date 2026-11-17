@@ -191,17 +191,17 @@ textarea.control{min-height:90px;resize:vertical}
 <dialog id="overwriteDialog" aria-labelledby="overwriteTitle">
 <div class="dialog-head"><div><h2 class="dialog-title" id="overwriteTitle">单条规则 · 强制覆盖</h2><p class="subtitle">此操作只允许更新一条已有规则，不支持批量覆盖</p></div><button type="button" id="overwriteClose" class="btn ghost small">关闭</button></div>
 <div class="dialog-body">
-<p class="overwrite-notice">覆盖将修改目标 Nightingale 中已有规则的 PromQL、时长、降噪、数据源及附加标签。原有启用/禁用状态、通知关联、生效时段及非本工具管理的配置保留。不删除或重新创建规则。</p>
+<p class="overwrite-notice">仅允许覆盖 Nightingale 中已停用的规则（Disabled，disabled=1）。如果现有规则处于 Enabled 状态，将直接拒绝操作；不会替你自动停用。覆盖将修改 PromQL、时长、降噪、数据源及附加标签，并保持原规则为 Disabled。通知关联、生效时段及其他配置保留，不会删除重建。</p>
 <div class="overwrite-step"><div class="overwrite-step-title">第一步 · 确认覆盖目标及配置差异</div>
 <div id="overwriteTarget" class="detail-value"></div><div id="overwriteDiffs" class="overwrite-diffs"></div>
-<label class="checkline" style="margin-top:12px"><input type="checkbox" id="overwriteRisk">我已检查目标规则 ID 和配置差异，了解会覆盖已有的规则配置。</label></div>
+<label class="checkline" style="margin-top:12px"><input type="checkbox" id="overwriteRisk">我已确认目标规则在 Nightingale 中为 Disabled，已检查规则 ID 和配置差异，了解会覆盖已有的规则配置。</label></div>
 <div class="overwrite-step"><div class="overwrite-step-title">第二步 · 输入完整规则名称</div>
 <p class="subtitle">必须输入与夜莺现有规则完全相同的名称（区分大小写）。</p>
 <input id="overwriteTyped" class="control" autocomplete="off" placeholder="输入规则完整名称" aria-label="输入将被覆盖的规则完整名称">
 </div>
 <div class="overwrite-step" id="overwriteFinalSection"><div class="overwrite-step-title">第三步 · 最终确认（一次性凭据）</div>
 <p class="subtitle">完成前两步后点击「进入最终确认」，再点击「确认覆盖这一条规则」。操作凭据有效期为 5 分钟，且只能使用一次。</p>
-<div id="overwriteFinalWarning" class="overwrite-notice hidden">这是最后一次确认。提交后将直接修改这一条 Nightingale 告警规则，无法通过本工具撤销。请先在 Nightingale 备份原有规则。</div>
+<div id="overwriteFinalWarning" class="overwrite-notice hidden">这是最后一次确认。仅允许覆盖 Disabled 状态的规则；后端会在提交前重新核对状态。覆盖不可通过本工具撤销，请先备份原有规则。</div>
 </div>
 <div id="overwriteStatus" class="overwrite-status" role="status" aria-live="polite"></div>
 <div class="import-confirm-actions">
@@ -401,7 +401,7 @@ async function startOverwrite(r){
   const data=await response.json();
   if(!response.ok)throw Error(data.error||"无法准备覆盖");
   overwritePending={...source,ticket:data.ticket,rule_id:data.rule_id,name:data.name,stage:1};
-  $("overwriteTarget").textContent="业务组 "+source.group_id+" · Excel 行 "+r.row+" · 夜莺规则 ID "+data.rule_id+" · "+data.name;
+  $("overwriteTarget").textContent="业务组 "+source.group_id+" · Excel 行 "+r.row+" · 夜莺规则 ID "+data.rule_id+" · "+data.name+" · 当前状态：Disabled（可覆盖）";
   $("overwriteDiffs").innerHTML=(data.changes||[]).map(item=>'<div class="overwrite-diff"><strong>'+escapeHTML(overwriteFieldNames[item.field]||item.field)+'</strong><code>原值：'+escapeHTML(item.before)+'</code><code>覆盖为：'+escapeHTML(item.after)+'</code></div>').join("");
   $("overwriteRisk").checked=false;$("overwriteTyped").value="";
   $("overwriteStatus").textContent="";
@@ -410,7 +410,7 @@ async function startOverwrite(r){
   $("overwriteFinalWarning").classList.add("hidden");
   renderOverwriteSteps();
   $("overwriteDialog").showModal();
- }catch(e){alert("无法打开覆盖确认："+e.message)}
+ }catch(e){alert("无法打开覆盖确认："+e.message+"\n若目标规则已启用，请先在 Nightingale 停用后重试。")}
  finally{overwriteBusy=false;render()}
 }
 $("overwriteNext").onclick=()=>{
