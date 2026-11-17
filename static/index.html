@@ -36,12 +36,19 @@ h1{font-size:24px;line-height:1.3;margin:0;font-weight:750;letter-spacing:-.5px}
 dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px));max-height:85vh;box-shadow:0 20px 70px #14233e40}dialog::backdrop{background:#11213b8c}.dialog-head{padding:19px 22px;border-bottom:1px solid #e5eaf0;display:flex;justify-content:space-between;align-items:center;gap:12px}.dialog-body{padding:21px 23px;overflow:auto;max-height:calc(85vh - 83px)}.dialog-title{font-size:17px;margin:0;overflow-wrap:anywhere}.detail-label{font-size:11px;color:#8390a3;font-weight:700;margin:19px 0 8px}.detail-value{white-space:pre-wrap;overflow-wrap:anywhere;color:#344154;font-size:13px;line-height:1.7}.code{background:#f6f8fc;border:1px solid #e6ebf4;border-radius:9px;padding:13px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .empty{padding:42px;text-align:center;color:#8290a4}.hidden{display:none!important}
 @media(max-width:1080px){.grid-top{grid-template-columns:1fr}.connection-fields{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.shell{padding:16px 12px 50px}.topbar{align-items:flex-start}h1{font-size:20px}.steps{flex-wrap:wrap}.chevron{padding:0 2px}.card-inner{padding:16px}.upload{grid-template-columns:1fr}.connection-fields{grid-template-columns:1fr 1fr}.connection-fields .field:first-child,.connection-fields .field:nth-child(2){grid-column:span 2}.stats{grid-template-columns:repeat(2,1fr)}.toolbar .searchbox,.toolbar .filterbox,.toolbar .groupbox{width:100%}.pagination{flex-wrap:wrap}}
+.param-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0 18px}
+.param-note{font-size:12px;color:#64748b;line-height:1.65}
+.param-block{margin:16px 0;padding:16px;border:1px solid #e3eaf3;border-radius:12px;background:#fafcff}
+.param-label{font-weight:700;font-size:12px;color:#36435b;margin:0 0 7px}
+textarea.control{min-height:90px;resize:vertical}
+.param-alert{display:none;color:#b42331;font-size:12px;white-space:pre-wrap;margin:10px 0}.param-alert.visible{display:block}
+@media(max-width:700px){.param-grid{grid-template-columns:1fr}}
 .target-choices{display:grid;gap:8px;max-height:200px;overflow:auto;border:1px solid #e4eaf1;border-radius:10px;padding:8px;background:#fcfdff}.target-option{width:100%;text-align:left;border:1px solid #e5ebf3;border-radius:9px;background:white;padding:11px 13px;display:flex;justify-content:space-between;gap:12px;align-items:center;color:#304158}.target-option:hover{border-color:#90b5f7;background:#f8fbff}.target-option.chosen{border:2px solid #2563eb;background:#f0f6ff;padding:10px 12px}.target-option small{color:#718096}.target-empty{padding:14px;text-align:center;color:#8190a2}
 </style>
 </head>
 <body>
 <main class="shell">
-<header class="topbar"><div class="brand"><span class="logo">N</span><div><h1>告警规则批量导入</h1><p class="subtitle">Nightingale v8 · Excel 导入助手 · 预览确认后才写入</p></div></div><span class="version">v0.6.0</span></header>
+<header class="topbar"><div class="brand"><span class="logo">N</span><div><h1>告警规则批量导入</h1><p class="subtitle">Nightingale v8 · Excel 导入助手 · 预览确认后才写入</p></div></div><span class="version">v0.7.0</span></header>
 <nav class="steps" aria-label="导入流程"><div class="step"><span class="stepnum current">1</span>解析 Excel</div><span class="chevron">›</span><div class="step"><span class="stepnum current">2</span>连接夜莺</div><span class="chevron">›</span><div class="step"><span class="stepnum current">3</span>筛选规则</div><span class="chevron">›</span><div class="step"><span class="stepnum current">4</span>确认导入</div></nav>
 <div class="grid-top">
 <section class="card"><div class="card-inner">
@@ -85,8 +92,8 @@ dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px))
 <button class="btn ghost small" id="bulkEnable" disabled>恢复筛选禁用</button>
 </div>
 <div class="table-wrap">
-<table><thead><tr><th>勾选</th><th>Excel 行</th><th>规则名称 / 分组</th><th>持续时间</th><th>原始 PromQL</th><th>校验状态</th><th>操作</th></tr></thead>
-<tbody id="rules"><tr><td colspan="7" class="empty">上传 Excel 后在此预览全部规则</td></tr></tbody></table>
+<table><thead><tr><th>勾选</th><th>Excel 行</th><th>规则名称 / 分组</th><th>持续时间</th><th>恢复 / 重复通知</th><th>原始 PromQL</th><th>校验状态</th><th>操作</th></tr></thead>
+<tbody id="rules"><tr><td colspan="8" class="empty">上传 Excel 后在此预览全部规则</td></tr></tbody></table>
 </div>
 <div class="pagination"><span id="paginationMeta" class="meta">0 条</span><label for="pageSize" class="subtitle">每页</label><select id="pageSize" class="control" style="width:80px"><option value="20">20 条</option><option value="50">50 条</option><option value="100">100 条</option></select><button id="prevPage" class="btn ghost small" disabled>上一页</button><span id="pageInfo" class="subtitle">1 / 1</span><button id="nextPage" class="btn ghost small" disabled>下一页</button></div>
 <details class="callout"><summary>导入规则与校验说明</summary><ul><li>警告不阻断导入；错误规则不可勾选。点击「查看详情」查看完整校验提示、原始与建议 PromQL。</li><li>“禁用候选”表示暂不参与本次导入；“删除候选”只从本次预览中移除，不会操作 Nightingale 中已有规则。</li><li>即使在此恢复候选，新建到夜莺的规则仍默认 <strong>disabled=1</strong>；保留原始 0m 持续时间。</li><li>通知路由、标签前置条件由操作者确认，不由导入工具自动生成。</li></ul></details>
@@ -140,6 +147,7 @@ const $=id=>document.getElementById(id);
 const escapeHTML=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
 let preview=null, connectionOK=false, importing=false, page=1, lastResult=null;
 let discovered=null, chosenGroup=null, chosenDatasource=null, discoveryBusy=false;
+const ruleParams=new Map();
 const selected=new Set(), paused=new Set(), removed=new Set();
 const isValid=r=>!r.issues.some(i=>i.level==="error");
 const hasWarning=r=>r.issues.some(i=>i.level==="warning");
@@ -182,7 +190,7 @@ function update(){
  for(const id of ["file","url","token","group","datasource","confirm"])$(id).disabled=importing;
 }
 function render(){
- if(!preview){$("rules").innerHTML='<tr><td class="empty" colspan="7">上传 Excel 后在此预览全部规则</td></tr>';update();return}
+ if(!preview){$("rules").innerHTML='<tr><td class="empty" colspan="8">上传 Excel 后在此预览全部规则</td></tr>';update();return}
  const matches=filteredRows(),size=Number($("pageSize").value)||20;
  const pageCount=Math.max(1,Math.ceil(matches.length/size));
  page=Math.min(Math.max(1,page),pageCount);
@@ -192,29 +200,84 @@ function render(){
   const severity=!allowed?'<span class="tag error">错误 '+r.issues.filter(x=>x.level==="error").length+'</span>':hasWarning(r)?'<span class="tag warn">警告 '+r.issues.filter(x=>x.level==="warning").length+'</span>':'<span class="tag success">通过</span>';
   return '<tr class="'+(pending?'is-paused':'')+'"><td class="checkcol"><input aria-label="选择 '+escapeHTML(r.name)+'" class="pick" type="checkbox" data-row="'+r.row+'" '+(checked?'checked ':'')+(!allowed||pending||importing?'disabled ':'')+'></td>'+
    '<td class="numcol">'+r.row+'</td><td class="rulecol"><div class="rule-name">'+escapeHTML(r.name)+'</div><div class="rule-sub">'+escapeHTML(r.group||"未分类")+(r.exporter?" · "+escapeHTML(r.exporter):"")+'</div></td>'+
-   '<td style="white-space:nowrap">'+escapeHTML(r.duration)+' <span class="subtitle">('+r.duration_seconds+'s)</span></td>'+
+   '<td style="white-space:nowrap">'+escapeHTML(r.duration)+' <span class="subtitle">('+r.duration_seconds+'s)</span></td>'+ 
+   '<td><span class="param-note">留观 '+currentParams(r).recover_duration+' 秒<br>重复 '+currentParams(r).notify_repeat_step+' 分钟 / 上限 '+currentParams(r).notify_max_number+'</span></td>'+
    '<td class="querycol"><div class="query-preview" title="'+escapeHTML(r.promql)+'">'+escapeHTML(r.promql)+'</div></td>'+
    '<td><div class="validation">'+severity+(pending?'<span class="tag">候选禁用</span>':'')+'</div></td>'+
    '<td><div class="row-actions"><button type="button" class="btn text small detail" data-row="'+r.row+'">详情</button><button type="button" class="btn text small toggle" data-row="'+r.row+'" '+(importing?'disabled':'')+'>'+(pending?'恢复':'禁用')+'</button><button type="button" class="btn text small danger-text remove" data-row="'+r.row+'" '+(importing?'disabled':'')+'>删除</button></div></td></tr>';
- }).join("")||'<tr><td class="empty" colspan="7">没有符合筛选条件的规则。可重置筛选条件或恢复已删除规则。</td></tr>';
+ }).join("")||'<tr><td class="empty" colspan="8">没有符合筛选条件的规则。可重置筛选条件或恢复已删除规则。</td></tr>';
  $("paginationMeta").textContent="显示 "+(matches.length?(page-1)*size+1:0)+"–"+Math.min(page*size,matches.length)+" / "+matches.length+" 条";
  $("pageInfo").textContent=page+" / "+pageCount;
  $("prevPage").disabled=page<=1;
  $("nextPage").disabled=page>=pageCount;
  update();
 }
+function defaultParams(r){
+ return {recover_duration:r.recovery_seconds??0,notify_repeat_step:r.repeat_minutes??0,
+  notify_max_number:r.max_repeat_count??0,label_requirements:r.label_requirements??"",
+  append_tags:[],labels_confirmed:false};
+}
+function currentParams(r){return ruleParams.get(r.row)||defaultParams(r)}
+function paramsPayload(rows){
+ const result={};
+ for(const row of rows){const r=getRule(row);if(r)result[row]=currentParams(r)}
+ return result;
+}
+function validStaticTags(input){
+ if(!input.trim())return [];
+ const parts=input.split(/[\n,;；]+/).map(x=>x.trim()).filter(Boolean);
+ if(parts.length>32)throw Error("静态附加标签最多32个");
+ for(const part of parts){
+  if(!/^[A-Za-z0-9_][A-Za-z0-9_.]*=[A-Za-z0-9_.:/-]+$/.test(part))throw Error("附加标签格式：每行 key=value，不支持中文、空格或 {{动态占位符}}");
+ }
+ return parts;
+}
+function saveRuleParams(r){
+ if(importing)return;
+ const value=id=>Number($(id).value);
+ const bounds=[["paramRecovery",86400,"留观时长（秒）"],["paramRepeat",10080,"重复提醒间隔（分钟）"],["paramLimit",10000,"最大重复次数"]];
+ for(const [id,max,name] of bounds){
+  const number=value(id);
+  if(!Number.isSafeInteger(number)||number<0||number>max)throw Error(name+"必须是0至"+max+"的整数");
+ }
+ const labels=$("paramLabelRequirements").value.trim();
+ if(labels.length>4000)throw Error("采集侧标签要求不得超过4000字符");
+ const tags=validStaticTags($("paramTags").value);
+ ruleParams.set(r.row,{recover_duration:value("paramRecovery"),notify_repeat_step:value("paramRepeat"),
+  notify_max_number:value("paramLimit"),label_requirements:labels,
+  append_tags:tags,labels_confirmed:$("paramLabelConfirmed").checked});
+ $("detailDialog").close();render();
+}
 function showDetail(r){
  if(!r)return;
+ const p=currentParams(r);
  $("detailTitle").textContent=r.name;
  const problems=r.issues.map(x=>'<div style="margin:8px 0"><span class="tag '+(x.level==="error"?"error":"warn")+'">'+(x.level==="error"?"错误":"警告")+'</span> '+escapeHTML(x.message)+'</div>').join("");
- $("detailBody").innerHTML='<div class="tag">Excel 第 '+r.row+' 行 · '+escapeHTML(r.group)+' · '+escapeHTML(r.duration)+'</div>'+
+ $("detailBody").innerHTML='<span class="tag">Excel 第 '+r.row+' 行 · '+escapeHTML(r.group)+' · '+escapeHTML(r.duration)+'</span>'+
  '<div class="detail-label">校验结果</div><div class="detail-value">'+(problems||'<span class="tag success">无错误或警告</span>')+'</div>'+
  '<div class="detail-label">原始 PromQL（实际导入）</div><div class="code">'+escapeHTML(r.promql)+'</div>'+
  '<div class="detail-label">Excel 建议查询（仅供比较，不会写入）</div><div class="code">'+escapeHTML(r.suggested_promql||"未提供")+'</div>'+
- '<div class="detail-label">原始持续时间 / 建议值</div><div class="detail-value">'+escapeHTML(r.duration)+' / '+escapeHTML(r.suggested_duration||"未提供")+'</div>'+
+ '<div class="param-block"><div class="param-label">告警参数配置 Sheet · J / K / L（可修改并写入夜莺规则）</div>'+
+ '<div class="param-grid">'+
+ '<div class="field"><label for="paramRecovery">J 列 · 留观时长（秒）</label><input id="paramRecovery" class="control" type="number" min="0" max="86400" step="1" value="'+p.recover_duration+'"><span class="param-note">Excel 原值：'+escapeHTML(r.recovery||"未提供")+'；对应 recover_duration</span></div>'+
+ '<div class="field"><label for="paramRepeat">K 列 · 重复通知间隔（分钟）</label><input id="paramRepeat" class="control" type="number" min="0" max="10080" step="1" value="'+p.notify_repeat_step+'"><span class="param-note">Excel 原值：'+escapeHTML(r.repeat||"未提供")+'；0 代表不重复提醒</span></div>'+
+ '<div class="field"><label for="paramLimit">L 列 · 最大重复次数</label><input id="paramLimit" class="control" type="number" min="0" max="10000" step="1" value="'+p.notify_max_number+'"><span class="param-note">Excel 原值：'+escapeHTML(r.max_repeat||"未提供")+'；0 代表不限制</span></div>'+
+ '</div></div>'+
+ '<div class="param-block"><div class="param-label">M 列 · 采集侧必备标签（校验要求，不是规则静态标签）</div>'+
+ '<textarea id="paramLabelRequirements" class="control" rows="3">'+escapeHTML(p.label_requirements)+'</textarea>'+
+ '<p class="param-note">该列包含主机名、应用标识等动态值，必须在采集器 / 指标源提供；不会自动写入 Nightingale append_tags。</p>'+
+ '<label class="checkline"><input id="paramLabelConfirmed" type="checkbox" '+(p.labels_confirmed?'checked':'')+'>我已核对指标采集侧的必备标签要求</label>'+
+ '<div class="field"><label for="paramTags">规则静态附加标签（可选，写入 append_tags）</label>'+
+ '<textarea id="paramTags" class="control" rows="2" placeholder="team=ops&#10;env=prod">'+escapeHTML(p.append_tags.join("\n"))+'</textarea>'+
+ '<span class="param-note">每行一个静态 key=value，不支持动态占位符，不能代替采集侧标签。</span></div></div>'+
+ '<div id="paramError" class="param-alert"></div><div class="footerline" style="justify-content:flex-end"><button type="button" class="btn ghost" id="paramReset">恢复 Excel 默认值</button><button type="button" class="btn" id="paramSave">保存当前规则参数</button></div>'+
  '<div class="detail-label">摘要 / 描述 / 处理建议</div><div class="detail-value">'+escapeHTML([r.summary,r.description,r.suggestion].filter(Boolean).join("\n\n")||"未提供")+'</div>'+
- '<div class="detail-label">通知与标签前置条件（不自动写入）</div><div class="detail-value">'+escapeHTML([r.notification,r.label_requirements].filter(Boolean).join("\n")||"无")+'</div>';
- $("detailDialog").showModal();
+ '<div class="detail-label">通知与前置条件</div><div class="detail-value">'+escapeHTML(r.notification||"无")+'</div>';
+ $("paramSave").onclick=()=>{
+  try{saveRuleParams(r)}catch(e){$("paramError").textContent=e.message;$("paramError").className="param-alert visible"}
+ };
+ $("paramReset").onclick=()=>{ruleParams.delete(r.row);showDetail(r)};
+ $("detailDialog").showModal?.();
 }
 $("closeDialog").onclick=()=>$("detailDialog").close();
 $("detailDialog").onclick=e=>{if(e.target===$("detailDialog"))$("detailDialog").close()};
@@ -322,7 +385,7 @@ $("preview").onclick=async()=>{
  try{
   const response=await fetch("/api/preview",{method:"POST",body:form});
   const data=await response.json();if(!response.ok)throw Error(data.error||"解析失败");
-  preview=data;selected.clear();removed.clear();paused.clear();
+  preview=data;selected.clear();removed.clear();paused.clear();ruleParams.clear();
   for(const r of data.rules)if(isValid(r))selected.add(r.row);
   $("search").value="";$("filter").value="all";$("groupFilter").innerHTML='<option value="">全部分组</option>';
   const groups=[...new Set(data.rules.map(r=>r.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-CN"));
@@ -330,7 +393,7 @@ $("preview").onclick=async()=>{
   const errorCount=data.rules.filter(r=>!isValid(r)).length;
   $("summary").textContent="✓ "+file.name+" · "+data.sheets.length+" 个 Sheet · "+data.rules.length+" 条有效规则"+(errorCount?" · "+errorCount+" 条有错误":"");
   $("confirm").checked=false;page=1;render();
- }catch(e){preview=null;selected.clear();removed.clear();paused.clear();$("summary").textContent="解析失败："+e.message;render()}
+ }catch(e){preview=null;selected.clear();removed.clear();paused.clear();ruleParams.clear();$("summary").textContent="解析失败："+e.message;render()}
  finally{button.disabled=false;update()}
 };
 function download(name,value){const blob=new Blob([JSON.stringify(value,null,2)],{type:"application/json"}),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),2000)}
@@ -450,7 +513,7 @@ $("import").onclick=async()=>{
  try{
   const response=await fetch("/api/import-stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
    url:$("url").value.trim(),token:$("token").value,group_id:Number($("group").value),datasource_id:Number($("datasource").value),
-   preview_id:preview.preview_id,rows,confirm:true
+   preview_id:preview.preview_id,rows,parameters:paramsPayload(rows),confirm:true
   })});
   await consumeImportStream(response);
  }catch(e){importEvent({type:"error",message:e.message})}
