@@ -32,7 +32,6 @@ struct RuleParams {
  recover_duration:Option<u64>,
  notify_repeat_step:Option<u64>,
  notify_max_number:Option<u64>,
- label_requirements:Option<String>,
  #[serde(default)] append_tags:Vec<String>,
 }
 #[derive(Clone,Deserialize)]struct ImportRequest {
@@ -54,7 +53,6 @@ fn checked_params(rule:&excel::Rule,override_value:Option<&RuleParams>)->Result<
  if count>10000{return Err("最大重复次数超过10000限制".into())}
  let tags=override_value.map(|x|x.append_tags.clone()).unwrap_or_default();
  if tags.len()>32||tags.iter().any(|t|!validate_append_tag(t)){return Err("附加标签格式不正确：仅允许32个以内的静态 key=value；不允许动态模板".into())}
- if let Some(text)=override_value.and_then(|x|x.label_requirements.as_ref()){if text.chars().count()>4000{return Err("采集侧标签要求文本过长".into())}}
  Ok((recovery,repeat,count,tags))
 }
 #[derive(Deserialize)]struct TestConnectionRequest { url:String,token:String,group_id:u64,datasource_id:u64 }
