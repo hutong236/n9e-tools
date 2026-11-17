@@ -86,6 +86,7 @@ textarea.control{min-height:90px;resize:vertical}
 <div class="selection-note" id="visibleCount">请先上传 Excel</div>
 <button class="btn ghost small" id="all" disabled>勾选筛选结果</button>
 <button class="btn ghost small" id="none" disabled>取消筛选勾选</button>
+<button class="btn ghost small" id="invert" disabled title="反转当前筛选结果中可导入规则的勾选状态（包含未显示的分页）">反选筛选结果</button>
 <button class="btn soft small" id="bulkDisable" disabled>批量禁用候选</button>
 <button class="btn danger small" id="bulkDelete" disabled>批量删除候选</button>
 <button class="btn ghost small" id="restore" disabled>恢复删除</button>
@@ -178,6 +179,7 @@ function update(){
  $("visibleCount").innerHTML="匹配 <strong>"+visible.length+"</strong> 条；其中已勾选 <strong>"+inScope+"</strong> 条；全局待导入 "+count+" 条";
  $("all").disabled=!preview||importing||!visible.some(r=>eligible(r)&&!selected.has(r.row));
  $("none").disabled=!preview||importing||!inScope;
+ $("invert").disabled=!preview||importing||!visible.some(eligible);
  $("bulkDisable").disabled=!preview||importing||!inScope;
  $("bulkDelete").disabled=!preview||importing||!inScope;
  $("restore").disabled=!preview||importing||removed.size===0;
@@ -304,6 +306,7 @@ $("prevPage").onclick=()=>{page--;render()};
 $("nextPage").onclick=()=>{page++;render()};
 $("all").onclick=()=>{for(const r of filteredRows())if(eligible(r))selected.add(r.row);render()};
 $("none").onclick=()=>{for(const r of filteredRows())selected.delete(r.row);render()};
+$("invert").onclick=()=>{for(const r of filteredRows()){if(!eligible(r))continue;if(selected.has(r.row))selected.delete(r.row);else selected.add(r.row)}render()};
 $("bulkDisable").onclick=()=>{
  const rows=filteredSelected();if(!rows.length)return;
  if(!confirm("禁用当前筛选范围内已勾选的 "+rows.length+" 条候选规则？\n仅排除本次导入，不影响夜莺已有规则。"))return;
