@@ -25,6 +25,7 @@ function setup(){
   );
  const rules=Array.from({length:15},(_,i)=>({
   row:i+5,name:"rule"+i,group:i%2?"A":"B",exporter:"node",promql:"up == 0",
+  excel_level:i%2?"P2":"P1",excel_severity:i%3?"一般":"严重",
   duration:"0m",duration_seconds:0,suggested_promql:"",suggested_duration:"",
   issues:i%3===0?[{level:"warning",message:"different query"}]:[]
  }));
@@ -384,4 +385,31 @@ test("non-persisted Excel labels are read-only context and never exported as rul
  assert.doesNotMatch(html,/id="paramLabelRequirements"/);
  assert.doesNotMatch(html,/id="paramLabelConfirmed"/);
  assert.doesNotMatch(html,/id="importConfirmUnconfirmed"/);
+});
+
+test("Excel level filter combines with severity, group and search; reset restores all",()=>{
+ const {ui,node}=setup();
+ node("levelFilter").value="P1";ui.render();
+ assert.equal(ui.filteredRows().length,8);
+ assert.ok(ui.filteredRows().every(r=>r.excel_level==="P1"));
+ node("severityFilter").value="严重";ui.render();
+ assert.deepEqual(ui.filteredRows().map(r=>r.row),[5,11,17]);
+ node("groupFilter").value="B";ui.render();
+ assert.equal(ui.filteredRows().length,3);
+ node("search").value="rule6";ui.render();
+ assert.deepEqual(ui.filteredRows().map(r=>r.row),[11]);
+ node("clearFilters").onclick();
+ assert.equal(node("levelFilter").value,"");
+ assert.equal(node("severityFilter").value,"");
+ assert.equal(node("groupFilter").value,"");
+ assert.equal(ui.filteredRows().length,15);
+});
+test("unknown and missing Excel severity fields do not match a selected filter",()=>{
+ const {ui,node}=setup();
+ node("severityFilter").value="不存在的严重程度";ui.render();
+ assert.equal(ui.filteredRows().length,0);
+ node("severityFilter").value="";ui.render();
+ assert.equal(ui.filteredRows().length,15);
+ assert.match(html,/id="levelFilter"/);
+ assert.match(html,/id="severityFilter"/);
 });
