@@ -486,6 +486,38 @@ mod tests {
   assert!(checked_params(&rule,Some(&invalid)).is_err());
  }
  #[test]
+ fn overwrite_payload_preserves_runtime_state_and_only_one_query(){
+  let rule=excel::Rule{
+   row:5,name:"CPU High".into(),group:String::new(),exporter:String::new(),category:String::new(),
+   promql:"up == 0".into(),suggested_promql:String::new(),duration:"2m".into(),duration_seconds:120,
+   suggested_duration:String::new(),summary:"new summary".into(),description:"new description".into(),
+   suggestion:String::new(),note:"new note".into(),notification:String::new(),
+   label_requirements:String::new(),recovery:"0m".into(),repeat:"10m".into(),
+   max_repeat:"2".into(),recovery_seconds:0,repeat_minutes:10,max_repeat_count:2,issues:vec![]
+  };
+  let original=serde_json::json!({"id":19,"name":"CPU High","group_id":5,
+   "cate":"prometheus","prod":"metric","disabled":0,"notify_rule_ids":[99],
+   "callbacks":["https://example.net"],"enable_stimes":["08:00"],
+   "rule_config":{"queries":[{"prom_ql":"up > 0","severity":2}]},
+   "append_tags":["original=tag"],"annotations":{"owner":"keep","summary":"old"}});
+  let params=RuleParams{append_tags:vec!["team=ops".into()],..Default::default()};
+  let updated=make_overwrite_payload(&original,&rule,5,7,Some(&params)).unwrap();
+  assert!(alert_identity(&original,19,"CPU High",5));
+  assert!(!alert_identity(&original,18,"CPU High",5));
+  assert_eq!(updated["disabled"],0);
+  assert_eq!(updated["notify_rule_ids"],serde_json::json!([99]));
+  assert_eq!(updated["callbacks"],serde_json::json!(["https://example.net"]));
+  assert_eq!(updated["enable_stimes"],serde_json::json!(["08:00"]));
+  assert_eq!(updated["rule_config"]["queries"][0]["prom_ql"],"up == 0");
+  assert_eq!(updated["rule_config"]["queries"][0]["severity"],1);
+  assert_eq!(updated["append_tags"],serde_json::json!(["team=ops"]));
+  assert_eq!(updated["annotations"]["owner"],"keep");
+  assert_eq!(updated["annotations"]["summary"],"new summary");
+  let mut multiple=original.clone();
+  multiple["rule_config"]["queries"]=serde_json::json!([{"prom_ql":"up","severity":1},{"prom_ql":"down","severity":1}]);
+  assert!(make_overwrite_payload(&multiple,&rule,5,7,Some(&params)).is_err());
+ }
+ #[test]
  fn existing_rule_list_shapes(){
   assert_eq!(extract_list(&serde_json::json!({"dat":[{"name":"a"}]})).unwrap().len(),1);
   assert_eq!(extract_list(&serde_json::json!({"dat":{"list":[{"name":"a"}],"total":1}})).unwrap().len(),1);
