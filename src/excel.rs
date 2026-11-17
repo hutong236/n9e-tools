@@ -11,7 +11,8 @@ pub struct Rule {
     pub promql:String,pub suggested_promql:String,pub duration:String,pub duration_seconds:u64,
     pub suggested_duration:String,pub summary:String,pub description:String,pub suggestion:String,
     pub note:String,pub notification:String,pub label_requirements:String,
-    pub recovery:String,pub repeat:String,pub issues:Vec<Issue>,
+    pub recovery:String,pub repeat:String,pub max_repeat:String,
+    pub recovery_seconds:u64,pub repeat_minutes:u64,pub max_repeat_count:u64,pub issues:Vec<Issue>,
 }
 #[derive(Serialize)]
 pub struct Preview {pub preview_id:String,pub sheets:Vec<String>,pub selected:usize,pub all_rules:usize,pub rules:Vec<Rule>,pub workbook_warnings:Vec<String>}
@@ -58,6 +59,13 @@ pub fn seconds(v:&str)->Option<u64>{let s=v.trim();if s.is_empty(){return None};
   if let Some(a)=s.strip_suffix(suffix){return a.trim().parse::<u64>().ok().map(|x|x*factor)}
  }s.parse::<u64>().ok()
 }
+pub fn repeat_count(value:&str)->Option<u64>{
+ let raw=value.trim();let digits:String=raw.chars().take_while(|c|c.is_ascii_digit()).collect();
+ if digits.is_empty(){return None}
+ let suffix=raw[digits.len()..].trim();
+ if !suffix.is_empty()&&suffix!="（不限）"&&suffix!="(不限)"{return None}
+ digits.parse().ok()
+}
 fn issue(level:&str,message:impl Into<String>)->Issue{Issue{level:level.into(),message:message.into()}}
 pub fn parse(data:&[u8])->Result<Preview,String>{
  if data.len()>16*1024*1024{return Err("文件超过16MB限制".into())}
@@ -90,7 +98,16 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
   if get(r,"H")!=get(r,"I"){issues.push(issue("warning","原始 PromQL 与建议查询条件不同，按用户要求使用原始值"))}
   if get(r,"M").contains("待确认")||get(r,"N").contains("待确认")||get(r,"O").contains("待确认"){issues.push(issue("warning","接收组待确认：不自动关联通知规则"))}
   if v(p,"O").contains("待确认"){issues.push(issue("warning","扩展标签存在占位符：不会作为静态标签写入"))}
-  let rule=Rule{row:rn,name,group:get(r,"C").into(),exporter:v(o,"B"),category:get(r,"D").into(),promql:get(r,"H").into(),suggested_promql:get(r,"I").into(),duration,duration_seconds,suggested_duration:v(p,"H"),summary:get(r,"J").into(),description:get(r,"K").into(),suggestion:get(r,"L").into(),note:get(r,"R").into(),notification:format!("{} / {} / {}",get(r,"M"),get(r,"N"),get(r,"O")),label_requirements:v(p,"M"),recovery:v(p,"J"),repeat:v(p,"K"),issues};
+  let recovery=v(p,"J");let repeat=v(p,"K");let max_repeat=v(p,"L");
+  let recovery_parsed=seconds(&recovery);
+  let repeat_parsed=seconds(&repeat);
+  let repeat_minutes=repeat_parsed.filter(|x|x%60==0).map(|x|x/60);
+  let max_repeat_count=repeat_count(&max_repeat);
+  if recovery_parsed.is_none(){issues.push(issue("error",format!("告警参数配置 J列：留观时长无法解析：{recovery}")))}
+  if repeat_minutes.is_none(){issues.push(issue("error",format!("告警参数配置 K列：重复通知间隔须为整分钟：{repeat}")))}
+  if max_repeat_count.is_none(){issues.push(issue("error",format!("告警参数配置 L列：最大重复次数无法解析：{max_repeat}")))}
+  if v(p,"M").trim().is_empty(){issues.push(issue("warning","告警参数配置 M列：未提供采集侧必备标签"))}
+  let rule=Rule{row:rn,name,group:get(r,"C").into(),exporter:v(o,"B"),category:get(r,"D").into(),promql:get(r,"H").into(),suggested_promql:get(r,"I").into(),duration,duration_seconds,suggested_duration:v(p,"H"),summary:get(r,"J").into(),description:get(r,"K").into(),suggestion:get(r,"L").into(),note:get(r,"R").into(),notification:format!("{} / {} / {}",get(r,"M"),get(r,"N"),get(r,"O")),label_requirements:v(p,"M"),recovery,repeat,max_repeat,recovery_seconds:recovery_parsed.unwrap_or(0),repeat_minutes:repeat_minutes.unwrap_or(0),max_repeat_count:max_repeat_count.unwrap_or(0),issues};
   rules.push(rule)
  }
  let mut warnings=vec!["全部有效规则均列入候选，不按颜色筛选；用户可在预览中自行过滤、禁用、删除".into(),"通知路由、消息模板、采集侧标签与待确认事项只作为校验上下文，不自动写入夜莺".into()];
@@ -98,7 +115,7 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  Ok(Preview{preview_id:String::new(),sheets:names,selected:rules.len(),all_rules:all,rules,workbook_warnings:warnings})
 }
 #[cfg(test)]mod tests{use super::*;
- #[test]fn durations(){assert_eq!(seconds("1m"),Some(60));assert_eq!(seconds("2 分钟"),Some(120));assert_eq!(seconds(""),None);assert_eq!(seconds("0m"),Some(0));}
+ #[test]fn durations(){assert_eq!(seconds("1m"),Some(60));assert_eq!(seconds("2 分钟"),Some(120));assert_eq!(seconds(""),None);assert_eq!(seconds("0m"),Some(0));assert_eq!(repeat_count("0（不限）"),Some(0));assert_eq!(repeat_count("3"),Some(3));assert_eq!(repeat_count("无限"),None);}
  #[test]fn red(){assert!(is_red("FFFF0000"));assert!(!is_red("FFD6E4F0"));}
 }
 
