@@ -8,6 +8,7 @@ pub struct Issue { pub level:String, pub message:String }
 #[derive(Clone,Debug,Serialize,Deserialize)]
 pub struct Rule {
     pub row:u32,pub name:String,pub group:String,pub exporter:String,pub category:String,
+    pub excel_level:String,pub excel_severity:String,
     pub promql:String,pub suggested_promql:String,pub duration:String,pub duration_seconds:u64,
     pub suggested_duration:String,pub summary:String,pub description:String,pub suggestion:String,
     pub note:String,pub notification:String,pub label_requirements:String,
@@ -53,6 +54,18 @@ fn parse_rows(xml:&str,strings:&[String])->Result<Rows,String>{
 }
 fn get<'a>(r:&'a HashMap<String,String>,column:&str)->&'a str{r.get(column).map(|s|s.as_str()).unwrap_or("")}
 fn index_by_name(rows:&Rows,col:&str)->HashMap<String,HashMap<String,String>>{rows.iter().filter(|r|r.get("#row").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0)>=5).filter(|r|!get(r,col).is_empty()).map(|r|(get(r,col).trim().to_string(),r.clone())).collect()}
+// Locate the two Excel metadata columns by their header text, not assumed column positions.
+// Templates may put them on different sheets or columns; never confuse them with the
+// hardcoded Nightingale severity used when creating an alert.
+fn metadata_header(rows:&Rows,label:&str)->Option<String>{
+ rows.iter().filter(|r|get(r,"#row").parse::<u32>().unwrap_or(u32::MAX)<5)
+  .find_map(|r|r.iter().find_map(|(col,value)|{
+   (col!="#row" && col!="#style" && value.trim()==label).then(||col.clone())
+  }))
+}
+fn metadata_value(row:&HashMap<String,String>,column:Option<&str>)->String{
+ column.map(|c|get(row,c).trim().to_string()).unwrap_or_default()
+}
 pub fn seconds(v:&str)->Option<u64>{let s=v.trim();if s.is_empty(){return None};
  if let Some(a)=s.strip_suffix("ms"){return a.trim().parse::<u64>().ok().map(|x|x/1000)}
  for (suffix,factor) in [("分钟",60),("小时",3600),("秒",1),("m",60),("h",3600),("s",1),("d",86400)]{
@@ -79,6 +92,11 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  let mut sheets=HashMap::<String,Rows>::new();
  for (i,n) in names.iter().enumerate(){let rows=parse_rows(&read_file(&mut zip,&format!("xl/worksheets/sheet{}.xml",i+1))?,&ss)?;sheets.insert(n.clone(),rows);}
  let details=sheets.get("规则配置明细").unwrap();let params=index_by_name(sheets.get("告警参数配置").unwrap(),"B");
+ let detail_level_col=metadata_header(details,"级别");
+ let detail_severity_col=metadata_header(details,"严重程度");
+ let list_rows=sheets.get("严重告警清单").unwrap();
+ let list_level_col=metadata_header(list_rows,"级别");
+ let list_severity_col=metadata_header(list_rows,"严重程度");
  let overview=index_by_name(sheets.get("严重告警清单").unwrap(),"E");
  let mut rules=Vec::new();let mut all=0;
  for r in details{
@@ -105,7 +123,11 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
   if recovery_parsed.is_some_and(|x|x>86400){issues.push(issue("error","留观时长超过24小时，超出实际导入允许范围"))}
   if repeat_minutes.is_some_and(|x|x>10080){issues.push(issue("error","重复通知间隔超过7天，超出实际导入允许范围"))}
   if max_repeat_count.is_some_and(|x|x>10000){issues.push(issue("error","最大重复次数超过10000，超出实际导入允许范围"))}
-  let rule=Rule{row:rn,name,group:get(r,"C").into(),exporter:v(o,"B"),category:get(r,"D").into(),promql:get(r,"H").into(),suggested_promql:get(r,"I").into(),duration,duration_seconds,suggested_duration:v(p,"H"),summary:get(r,"J").into(),description:get(r,"K").into(),suggestion:get(r,"L").into(),note:get(r,"R").into(),notification:format!("{} / {} / {}",get(r,"M"),get(r,"N"),get(r,"O")),label_requirements:v(p,"M"),recovery,repeat,max_repeat,recovery_seconds:recovery_parsed.unwrap_or(0),repeat_minutes:repeat_minutes.unwrap_or(0),max_repeat_count:max_repeat_count.unwrap_or(0),issues};
+  let excel_level=metadata_value(r,detail_level_col.as_deref());
+  let excel_level=if excel_level.is_empty(){o.map(|r|metadata_value(r,list_level_col.as_deref())).unwrap_or_default()}else{excel_level};
+  let excel_severity=metadata_value(r,detail_severity_col.as_deref());
+  let excel_severity=if excel_severity.is_empty(){o.map(|r|metadata_value(r,list_severity_col.as_deref())).unwrap_or_default()}else{excel_severity};
+  let rule=Rule{row:rn,name,group:get(r,"C").into(),exporter:v(o,"B"),category:get(r,"D").into(),excel_level,excel_severity,promql:get(r,"H").into(),suggested_promql:get(r,"I").into(),duration,duration_seconds,suggested_duration:v(p,"H"),summary:get(r,"J").into(),description:get(r,"K").into(),suggestion:get(r,"L").into(),note:get(r,"R").into(),notification:format!("{} / {} / {}",get(r,"M"),get(r,"N"),get(r,"O")),label_requirements:v(p,"M"),recovery,repeat,max_repeat,recovery_seconds:recovery_parsed.unwrap_or(0),repeat_minutes:repeat_minutes.unwrap_or(0),max_repeat_count:max_repeat_count.unwrap_or(0),issues};
   rules.push(rule)
  }
  let mut warnings=vec!["全部有效规则均列入候选，不按颜色筛选；用户可在预览中自行过滤、禁用、删除".into(),"通知接收组、采集侧标签要求及Excel建议查询只作参考，不写入夜莺，也不计入规则校验状态".into()];
@@ -115,6 +137,16 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
 #[cfg(test)]mod tests{use super::*;
  #[test]fn durations(){assert_eq!(seconds("1m"),Some(60));assert_eq!(seconds("2 分钟"),Some(120));assert_eq!(seconds(""),None);assert_eq!(seconds("0m"),Some(0));assert_eq!(repeat_count("0（不限）"),Some(0));assert_eq!(repeat_count("3"),Some(3));assert_eq!(repeat_count("无限"),None);}
  #[test]fn red(){assert!(is_red("FFFF0000"));assert!(!is_red("FFD6E4F0"));}
+ #[test]fn finds_excel_level_and_severity_headers(){
+  let rows=vec![
+   HashMap::from([("#row".into(),"3".into()),("K".into(),"级别".into()),("L".into(),"严重程度".into())]),
+   HashMap::from([("#row".into(),"5".into()),("K".into(),"P1".into()),("L".into(),"严重".into())])
+  ];
+  assert_eq!(metadata_header(&rows,"级别").as_deref(),Some("K"));
+  assert_eq!(metadata_header(&rows,"严重程度").as_deref(),Some("L"));
+  assert_eq!(metadata_value(&rows[1],metadata_header(&rows,"级别").as_deref()),"P1");
+  assert_eq!(metadata_header(&rows,"不存在"),None);
+ }
 }
 
 #[cfg(test)]
@@ -141,14 +173,17 @@ mod integration_tests {
     z.start_file(format!("xl/worksheets/sheet{idx}.xml"),opts).unwrap();
     write!(z,"{}<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>",xml_header).unwrap();
     if idx==2||idx==3||idx==4 {
+     if idx==2||idx==3 {
+      write!(z,"<row r=\"4\"><c r=\"S4\" t=\"inlineStr\"><is><t>级别</t></is></c><c r=\"T4\" t=\"inlineStr\"><is><t>严重程度</t></is></c></row>").unwrap();
+     }
      for i in 0..104 {
       let row=i+5;let name=format!("synthetic-{i}");
       write!(z,"<row r=\"{row}\">").unwrap();
       if idx==2 {
-       write!(z,"<c r=\"E{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"I{row}\" t=\"inlineStr\"><is><t>{}</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
+       write!(z,"<c r=\"E{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"I{row}\" t=\"inlineStr\"><is><t>{}</t></is></c><c r=\"S{row}\" t=\"inlineStr\"><is><t>fallback</t></is></c><c r=\"T{row}\" t=\"inlineStr\"><is><t>清单严重度</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
       }else if idx==3 {
        let style=if i<54 {1}else{0};
-       write!(z,"<c r=\"A{row}\" s=\"{style}\"><v>{}</v></c><c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"H{row}\" t=\"inlineStr\"><is><t>vector(1) > 0</t></is></c><c r=\"I{row}\" t=\"inlineStr\"><is><t>vector(2) > 0</t></is></c><c r=\"M{row}\" t=\"inlineStr\"><is><t>待确认</t></is></c>",i+1).unwrap();
+       write!(z,"<c r=\"A{row}\" s=\"{style}\"><v>{}</v></c><c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"H{row}\" t=\"inlineStr\"><is><t>vector(1) > 0</t></is></c><c r=\"I{row}\" t=\"inlineStr\"><is><t>vector(2) > 0</t></is></c><c r=\"M{row}\" t=\"inlineStr\"><is><t>待确认</t></is></c><c r=\"S{row}\" t=\"inlineStr\"><is><t>{}</t></is></c><c r=\"T{row}\" t=\"inlineStr\"><is><t>{}</t></is></c>",i+1,if i%2==0{"P1"}else{"P2"},if i%2==0{"严重"}else{"一般"}).unwrap();
       }else{
        write!(z,"<c r=\"B{row}\" t=\"inlineStr\"><is><t>{name}</t></is></c><c r=\"G{row}\" t=\"inlineStr\"><is><t>{}</t></is></c><c r=\"J{row}\" t=\"inlineStr\"><is><t>5 分钟</t></is></c><c r=\"K{row}\" t=\"inlineStr\"><is><t>60 分钟</t></is></c><c r=\"L{row}\" t=\"inlineStr\"><is><t>0（不限）</t></is></c><c r=\"M{row}\" t=\"inlineStr\"><is><t>host={{{{主机名}}}}</t></is></c><c r=\"O{row}\" t=\"inlineStr\"><is><t>待确认</t></is></c>",if i<11{"0m"}else{"1m"}).unwrap();
       }
@@ -171,6 +206,10 @@ mod integration_tests {
   assert_eq!(preview.rules[0].repeat_minutes,60);
   assert_eq!(preview.rules[0].max_repeat_count,0);
   assert_eq!(preview.rules[0].label_requirements,"host={{主机名}}");
+  assert_eq!(preview.rules[0].excel_level,"P1");
+  assert_eq!(preview.rules[0].excel_severity,"严重");
+  assert_eq!(preview.rules[1].excel_level,"P2");
+  assert_eq!(preview.rules[1].excel_severity,"一般");
   assert!(preview.rules[0].issues.iter().all(|i|i.level!="error"));
   assert!(preview.rules.iter().all(|r|r.issues.is_empty()),"辅助标签占位符、通知待确认与建议PromQL差异不应生成规则校验警告");
  }
