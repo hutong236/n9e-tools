@@ -6,7 +6,7 @@ on:
       release_label:
         description: 'Package label (letters, numbers, dot, underscore, dash)'
         required: true
-        default: 'v0.6.0'
+        default: 'v0.7.0'
         type: string
 
 permissions:
