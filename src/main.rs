@@ -1,11 +1,30 @@
 mod excel;
-use axum::{body::{Body,Bytes},extract::{Multipart,DefaultBodyLimit,State},http::{StatusCode,header},response::{Html,Response},routing::{get,post},Json,Router};
+use axum::{body::{Body,Bytes},extract::{Multipart,DefaultBodyLimit,State},Extension,http::{StatusCode,header},response::{Html,Response},routing::{get,post},Json,Router};
 use serde::{Deserialize,Serialize};
 use serde_json::Value;
-use std::{collections::{HashSet,HashMap},net::SocketAddr,time::Duration,sync::{Arc,Mutex}};
+use std::{collections::{HashSet,HashMap},net::SocketAddr,time::{Duration,Instant},sync::{Arc,Mutex}};
 use excel::Preview;
 use tokio_stream::{wrappers::ReceiverStream,StreamExt};
 type AppState=Arc<Mutex<HashMap<String,Preview>>>;
+type OverwriteState=Arc<Mutex<HashMap<String,OverwritePlan>>>;
+struct OverwritePlan {
+ created:Instant, group_id:u64, datasource_id:u64, row:u32, preview_id:String,
+ url:String, rule_id:u64, name:String, original:Value, updated:Value,
+}
+#[derive(Deserialize)]struct OverwritePrepareRequest {
+ url:String,token:String,group_id:u64,datasource_id:u64,preview_id:String,row:u32,
+ #[serde(default)]parameters:Option<RuleParams>
+}
+#[derive(Deserialize)]struct OverwriteExecuteRequest {
+ url:String,token:String,group_id:u64,datasource_id:u64,preview_id:String,row:u32,
+ ticket:String,expected_rule_id:u64,typed_name:String,confirm_overwrite:bool
+}
+#[derive(Serialize)]struct OverwritePrepareResult {
+ ticket:String,rule_id:u64,name:String,expires_seconds:u64,
+ changes:Vec<OverwriteChange>,preserved:Vec<String>
+}
+#[derive(Serialize)]struct OverwriteChange {field:String,before:String,after:String}
+
 
 #[derive(Clone,Deserialize,Default)]
 struct RuleParams {
@@ -184,6 +203,137 @@ async fn check_created_tags(client:&reqwest::Client,uri:&str,token:&str,name:&st
   ("mismatch".into(),format!("创建 API 已接受，但回读未发现标签：{}；请检查 Nightingale 规则详情",missing.join(", ")))
  }
 }
+
+fn checked_rule_from_preview(state:&AppState,preview_id:&str,row:u32)->Result<excel::Rule,(StatusCode,Json<Value>)>{
+ let cache=state.lock().map_err(|_|error(StatusCode::INTERNAL_SERVER_ERROR,"预览状态锁异常"))?;
+ let preview=cache.get(preview_id).ok_or_else(||error(StatusCode::BAD_REQUEST,"预览已过期，请重新上传文件"))?;
+ let rule=preview.rules.iter().find(|r|r.row==row).ok_or_else(||error(StatusCode::BAD_REQUEST,"规则不在当前Excel预览中"))?;
+ if rule.name.trim().is_empty()||rule.promql.trim().is_empty()||rule.issues.iter().any(|i|i.level=="error"){
+  return Err(error(StatusCode::BAD_REQUEST,"规则未通过校验，禁止覆盖"))
+ }
+ Ok(rule.clone())
+}
+fn alert_identity(rule:&Value,id:u64,name:&str,group_id:u64)->bool{
+ rule.get("id").and_then(Value::as_u64)==Some(id)
+ &&rule.get("name").and_then(Value::as_str)==Some(name)
+ &&rule.get("group_id").and_then(Value::as_u64)==Some(group_id)
+ &&rule.get("cate").and_then(Value::as_str)==Some("prometheus")
+ &&rule.get("prod").and_then(Value::as_str).map(|p|p=="metric"||p=="").unwrap_or(true)
+}
+fn make_overwrite_payload(original:&Value,rule:&excel::Rule,group_id:u64,datasource_id:u64,params:Option<&RuleParams>)->Result<Value,String>{
+ let (recovery,repeat,count,tags)=checked_params(rule,params)?;
+ let mut updated=original.clone();
+ let obj=updated.as_object_mut().ok_or("夜莺原规则不是JSON对象")?;
+ let cfg=obj.get("rule_config").and_then(Value::as_object).ok_or("规则配置缺失或格式无法识别，拒绝覆盖")?;
+ if cfg.get("version").and_then(Value::as_str)==Some("v2") {return Err("当前规则为 Prometheus v2，暂不支持覆盖".into())}
+ let queries=cfg.get("queries").and_then(Value::as_array).ok_or("原规则缺少查询数组")?;
+ if queries.len()!=1{return Err("只支持单查询规则；多查询规则禁止覆盖".into())}
+ let query=queries[0].as_object().ok_or("原查询配置无效")?;
+ if !query.contains_key("prom_ql"){return Err("原查询不是 PromQL 规则".into())}
+ let mut config=obj.get("rule_config").cloned().unwrap();
+ let query=config.get_mut("queries").and_then(Value::as_array_mut).and_then(|a|a.get_mut(0)).and_then(Value::as_object_mut).ok_or("原查询配置无法修改")?;
+ query.insert("prom_ql".into(),Value::String(rule.promql.clone()));
+ query.insert("severity".into(),serde_json::json!(1));
+ obj.insert("rule_config".into(),config);
+ obj.insert("note".into(),Value::String(rule.note.clone()));
+ obj.insert("prom_for_duration".into(),serde_json::json!(rule.duration_seconds));
+ obj.insert("prom_eval_interval".into(),serde_json::json!(30));
+ obj.insert("recover_duration".into(),serde_json::json!(recovery));
+ obj.insert("notify_repeat_step".into(),serde_json::json!(repeat));
+ obj.insert("notify_max_number".into(),serde_json::json!(count));
+ obj.insert("datasource_queries".into(),serde_json::json!([{"match_type":0,"op":"in","values":[datasource_id]}]));
+ obj.insert("append_tags".into(),serde_json::json!(tags));
+ let annotations=obj.entry("annotations".to_string()).or_insert_with(||serde_json::json!({}));
+ let map=annotations.as_object_mut().ok_or("原注释信息格式异常")?;
+ map.insert("summary".into(),Value::String(rule.summary.clone()));
+ map.insert("description".into(),Value::String(rule.description.clone()));
+ map.insert("suggestion".into(),Value::String(rule.suggestion.clone()));
+ // Never touch disabled, notify rule IDs, schedule or callbacks.
+ if obj.get("group_id").and_then(Value::as_u64)!=Some(group_id){return Err("原规则业务组不匹配".into())}
+ Ok(updated)
+}
+fn overwrite_changes(original:&Value,updated:&Value)->Vec<OverwriteChange>{
+ const FIELDS:&[&str]=&["rule_config","note","prom_for_duration","prom_eval_interval","recover_duration","notify_repeat_step","notify_max_number","datasource_queries","append_tags","annotations"];
+ FIELDS.iter().filter_map(|key|{
+  let a=original.get(key),b=updated.get(key);
+  if a==b{return None}
+  Some(OverwriteChange{
+   field:key.to_string(),
+   before:a.and_then(|v|serde_json::to_string(v).ok()).unwrap_or_else(||"未设置".into()),
+   after:b.and_then(|v|serde_json::to_string(v).ok()).unwrap_or_else(||"未设置".into())
+  })
+ }).collect()
+}
+async fn fetch_rule_detail(client:&reqwest::Client,base:&str,token:&str,id:u64)->Result<Value,(StatusCode,Json<Value>)>{
+ let response=client.get(format!("{base}/api/n9e/alert-rule/{id}/pure"))
+  .header("X-User-Token",token).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,format!("读取现有规则失败：{e}")))?;
+ let value=api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
+ value.get("dat").or_else(||value.get("data")).filter(|v|v.is_object())
+  .cloned().ok_or_else(||error(StatusCode::BAD_GATEWAY,"无法读取告警规则完整详情"))
+}
+async fn overwrite_prepare(
+ State(state):State<AppState>,Extension(tickets):Extension<OverwriteState>,
+ Json(req):Json<OverwritePrepareRequest>
+)->Result<Json<OverwritePrepareResult>,(StatusCode,Json<Value>)>{
+ if req.token.trim().is_empty()||req.group_id==0||req.datasource_id==0{return Err(error(StatusCode::BAD_REQUEST,"连接信息或业务组/数据源未设置"))}
+ let rule=checked_rule_from_preview(&state,&req.preview_id,req.row)?;
+ let base=valid_url(&req.url).map_err(|e|error(StatusCode::BAD_REQUEST,e))?;
+ let client=reqwest::Client::builder().timeout(Duration::from_secs(20)).redirect(reqwest::redirect::Policy::none()).build().map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+ let list_url=format!("{base}/api/n9e/busi-group/{}/alert-rules",req.group_id);
+ let response=client.get(&list_url).header("X-User-Token",&req.token).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,e.to_string()))?;
+ let value=api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
+ let list=extract_list(&value).map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
+ let matches:Vec<&Value>=list.iter().filter(|x|x.get("name").and_then(Value::as_str)==Some(&rule.name)).collect();
+ if matches.len()!=1{return Err(error(StatusCode::CONFLICT,format!("同名规则匹配到 {} 条，必须恰好一条才允许覆盖",matches.len())))}
+ let id=matches[0].get("id").and_then(Value::as_u64).filter(|x|*x>0).ok_or_else(||error(StatusCode::BAD_GATEWAY,"目标规则缺少有效ID"))?;
+ let current=fetch_rule_detail(&client,&base,&req.token,id).await?;
+ if !alert_identity(&current,id,&rule.name,req.group_id){return Err(error(StatusCode::CONFLICT,"现有规则ID、名称或业务组不一致，覆盖已取消"))}
+ let updated=make_overwrite_payload(&current,&rule,req.group_id,req.datasource_id,req.parameters.as_ref()).map_err(|e|error(StatusCode::BAD_REQUEST,e))?;
+ let changes=overwrite_changes(&current,&updated);
+ if changes.is_empty(){return Err(error(StatusCode::CONFLICT,"现有配置与Excel配置一致，无需覆盖"))}
+ let ticket=uuid::Uuid::new_v4().to_string();
+ {
+  let mut store=tickets.lock().map_err(|_|error(StatusCode::INTERNAL_SERVER_ERROR,"确认状态锁异常"))?;
+  store.retain(|_,p|p.created.elapsed()<Duration::from_secs(300));
+  if store.len()>200{store.clear()}
+  store.insert(ticket.clone(),OverwritePlan{
+   created:Instant::now(),group_id:req.group_id,datasource_id:req.datasource_id,row:req.row,
+   preview_id:req.preview_id,url:base,rule_id:id,name:rule.name,original:current,updated
+  });
+ }
+ Ok(Json(OverwritePrepareResult{ticket,rule_id:id,name:rule.name.clone(),expires_seconds:300,changes,
+  preserved:vec!["原规则启用/禁用状态".into(),"通知关联、回调与生效时间段".into(),"其他Excel未管理的夜莺配置".into()]}))
+}
+async fn overwrite_execute(
+ Extension(tickets):Extension<OverwriteState>,Json(req):Json<OverwriteExecuteRequest>
+)->Result<Json<Value>,(StatusCode,Json<Value>)>{
+ if !req.confirm_overwrite||req.token.trim().is_empty(){return Err(error(StatusCode::BAD_REQUEST,"覆盖必须完成最终确认"))}
+ // Remove BEFORE network operations: a ticket can never be replayed, even if an update fails.
+ let plan=tickets.lock().map_err(|_|error(StatusCode::INTERNAL_SERVER_ERROR,"确认状态锁异常"))?
+  .remove(&req.ticket).ok_or_else(||error(StatusCode::CONFLICT,"确认凭据无效或已使用，请重新检查差异"))?;
+ if plan.created.elapsed()>=Duration::from_secs(300){return Err(error(StatusCode::CONFLICT,"确认已过期，请重新预览"))}
+ let base=valid_url(&req.url).map_err(|e|error(StatusCode::BAD_REQUEST,e))?;
+ if plan.url!=base||plan.group_id!=req.group_id||plan.datasource_id!=req.datasource_id||
+  plan.preview_id!=req.preview_id||plan.row!=req.row||plan.rule_id!=req.expected_rule_id||
+  req.typed_name!=plan.name
+ {return Err(error(StatusCode::CONFLICT,"覆盖目标与确认预览不一致，操作已取消"))}
+ let client=reqwest::Client::builder().timeout(Duration::from_secs(20)).redirect(reqwest::redirect::Policy::none()).build().map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
+ let latest=fetch_rule_detail(&client,&base,&req.token,plan.rule_id).await?;
+ if latest!=plan.original{return Err(error(StatusCode::CONFLICT,"夜莺规则自预览后发生变化，禁止覆盖；请重新查看差异"))}
+ if !alert_identity(&latest,plan.rule_id,&plan.name,plan.group_id){return Err(error(StatusCode::CONFLICT,"规则身份检查失败"))}
+ let uri=format!("{base}/api/n9e/busi-group/{}/alert-rule/{}",plan.group_id,plan.rule_id);
+ let response=client.put(&uri).header("X-User-Token",&req.token).json(&plan.updated).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,format!("覆盖请求失败：{e}")))?;
+ api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
+ let saved=fetch_rule_detail(&client,&base,&req.token,plan.rule_id).await?;
+ let mut mismatch=Vec::new();
+ for field in ["rule_config","prom_for_duration","recover_duration","notify_repeat_step","notify_max_number","append_tags","datasource_queries"]{
+  if saved.get(field)!=plan.updated.get(field){mismatch.push(field)}
+ }
+ Ok(Json(serde_json::json!({"rule_id":plan.rule_id,"name":plan.name,
+  "updated":true,"verified":mismatch.is_empty(),"mismatch_fields":mismatch,
+  "message":if mismatch.is_empty(){"单条规则覆盖成功，关键字段回读一致"}else{"更新API已接受，但有字段回读不一致，请检查夜莺实际配置"}})))
+}
+
 async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync::mpsc::Sender<Bytes>>)->Result<ImportResult,(StatusCode,Json<Value>)>{
  if !req.confirm{return Err(error(StatusCode::BAD_REQUEST,"必须先确认导入"))}
  if req.token.trim().is_empty()||req.group_id==0||req.datasource_id==0{return Err(error(StatusCode::BAD_REQUEST,"Token、业务组ID和数据源ID必填"))}
@@ -284,7 +434,8 @@ async fn import_stream(State(state):State<AppState>,Json(req):Json<ImportRequest
 #[tokio::main]async fn main(){
  tracing_subscriber::fmt::init();
  let state:AppState=Arc::new(Mutex::new(HashMap::new()));
- let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).route("/api/import-stream",post(import_stream)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state);
+ let overwrite_state:OverwriteState=Arc::new(Mutex::new(HashMap::new()));
+ let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).route("/api/import-stream",post(import_stream)).route("/api/overwrite/prepare",post(overwrite_prepare)).route("/api/overwrite/execute",post(overwrite_execute)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state).layer(Extension(overwrite_state));
  let bind=std::env::var("BIND").unwrap_or("127.0.0.1:8088".into());
  let addr:SocketAddr=bind.parse().expect("BIND must be IP:port");
  let listener=tokio::net::TcpListener::bind(addr).await.unwrap();
