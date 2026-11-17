@@ -203,7 +203,8 @@ function render(){
   return '<tr class="'+(pending?'is-paused':'')+'"><td class="checkcol"><input aria-label="选择 '+escapeHTML(r.name)+'" class="pick" type="checkbox" data-row="'+r.row+'" '+(checked?'checked ':'')+(!allowed||pending||importing?'disabled ':'')+'></td>'+
    '<td class="numcol">'+r.row+'</td><td class="rulecol"><div class="rule-name">'+escapeHTML(r.name)+'</div><div class="rule-sub">'+escapeHTML(r.group||"未分类")+(r.exporter?" · "+escapeHTML(r.exporter):"")+'</div></td>'+
    '<td style="white-space:nowrap">'+escapeHTML(r.duration)+' <span class="subtitle">('+r.duration_seconds+'s)</span></td>'+ 
-   '<td><span class="param-note">留观 '+currentParams(r).recover_duration+' 秒<br>重复 '+currentParams(r).notify_repeat_step+' 分钟 / 上限 '+currentParams(r).notify_max_number+'</span></td>'+
+   '<td><span class="param-note">留观 '+currentParams(r).recover_duration+' 秒<br>重复 '+currentParams(r).notify_repeat_step+' 分钟 / 上限 '+currentParams(r).notify_max_number+
+   (currentParams(r).append_tags.length?'<br><strong>附加标签 '+currentParams(r).append_tags.length+' 个</strong>':'<br>未设置附加标签')+'</span></td>'+
    '<td class="querycol"><div class="query-preview" title="'+escapeHTML(r.promql)+'">'+escapeHTML(r.promql)+'</div></td>'+
    '<td><div class="validation">'+severity+(pending?'<span class="tag">候选禁用</span>':'')+'</div></td>'+
    '<td><div class="row-actions"><button type="button" class="btn text small detail" data-row="'+r.row+'">详情</button><button type="button" class="btn text small toggle" data-row="'+r.row+'" '+(importing?'disabled':'')+'>'+(pending?'恢复':'禁用')+'</button><button type="button" class="btn text small danger-text remove" data-row="'+r.row+'" '+(importing?'disabled':'')+'>删除</button></div></td></tr>';
@@ -422,7 +423,7 @@ function importEvent(event){
   importJob.current="正在处理第 "+event.index+" / "+importJob.total+" 条："+String(event.name||"");
  }else if(event.type==="item"&&event.item){
   const item=event.item;
-  importJob.items.push({row:Number(item.row)||0,name:String(item.name||""),status:String(item.status||"failed"),message:String(item.message||"")});
+  importJob.items.push({row:Number(item.row)||0,name:String(item.name||""),status:String(item.status||"failed"),message:String(item.message||""),tags_requested:Array.isArray(item.tags_requested)?item.tags_requested:[],tags_verification:item.tags_verification||null});
   importJob.processed=importJob.items.length;
   if(item.status==="created")importJob.created++;
   else if(item.status==="skipped")importJob.skipped++;
@@ -464,8 +465,9 @@ function renderImportResults(){
  const shown=matching.slice(-200);
  $("importRows").innerHTML=shown.map((x,i)=>{
   const type=resultType(x.status);
-  const label=type==="created"?"成功":type==="skipped"?"跳过":x.status==="invalid"?"校验错误":"失败";
-  const badge=type==="created"?"success":type==="skipped"?"warn":"error";
+  const unverified=x.tags_verification==="unverified"||x.tags_verification==="mismatch";
+  const label=type==="created"?(unverified?"创建成功·标签待核验":"成功"):type==="skipped"?"跳过":x.status==="invalid"?"校验错误":"失败";
+  const badge=type==="created"?(unverified?"warn":"success"):type==="skipped"?"warn":"error";
   return '<tr><td class="numcol">'+(matching.length-shown.length+i+1)+'</td><td class="numcol">'+x.row+'</td>'+
    '<td class="import-rule">'+escapeHTML(x.name)+'</td><td><span class="tag '+badge+'">'+label+'</span></td><td class="import-message">'+escapeHTML(x.message)+'</td></tr>';
  }).join("")||'<tr><td class="empty" colspan="5">当前状态下暂无匹配记录</td></tr>';
@@ -511,8 +513,11 @@ async function consumeImportStream(response){
 $("import").onclick=async()=>{
  if(!preview||!connectionOK||!$("confirm").checked||importing)return;
  const rows=picks();
+ const tagged=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).append_tags.length>0}).length;
+ const chosenTags=rows.flatMap(row=>{const r=getRule(row);return r?currentParams(r).append_tags:[]});
  const unconfirmed=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).label_requirements.trim()&&!currentParams(r).labels_confirmed}).length;
- if(!rows.length||!confirm("向业务组 "+$("group").value+" 提交 "+rows.length+" 条规则？\\n已有同名规则跳过，新建规则默认禁用。"+(unconfirmed?"\\n⚠ "+unconfirmed+" 条规则的采集侧标签前置条件尚未逐条确认，请确保对应标签已在指标中提供。":"")))return;
+ if(!rows.length||!confirm("向业务组 "+$("group").value+" 提交 "+rows.length+" 条规则？\n已保存静态附加标签："+tagged+" / "+rows.length+" 条"+(chosenTags.length?"\n例如："+chosenTags.slice(0,4).join("、"):"\n当前没有规则设置静态附加标签。")+
+ "\n已有同名规则会直接跳过，已存在的附加标签不会更新；新建规则默认禁用。"+(unconfirmed?"\n⚠ "+unconfirmed+" 条规则的采集侧标签要求尚未人工确认。":"")))return;
  importing=true;resetImportJob(rows);render();
  try{
   const response=await fetch("/api/import-stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
