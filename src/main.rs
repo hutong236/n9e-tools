@@ -489,7 +489,7 @@ mod tests {
    recovery_seconds:300,repeat_minutes:60,max_repeat_count:0,issues:vec![]
   };
   let overrides=RuleParams{recover_duration:Some(600),notify_repeat_step:Some(45),
-   notify_max_number:Some(3),label_requirements:None,append_tags:vec!["team=ops".into()]};
+   notify_max_number:Some(3),append_tags:vec!["team=ops".into()]};
   let (r,n,m,tags)=checked_params(&rule,Some(&overrides)).unwrap();
   assert_eq!((r,n,m),(600,45,3));
   assert_eq!(tags,vec!["team=ops"]);
