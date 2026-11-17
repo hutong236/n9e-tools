@@ -255,7 +255,7 @@ fn make_overwrite_payload(original:&Value,rule:&excel::Rule,group_id:u64,datasou
 fn overwrite_changes(original:&Value,updated:&Value)->Vec<OverwriteChange>{
  const FIELDS:&[&str]=&["rule_config","note","prom_for_duration","prom_eval_interval","recover_duration","notify_repeat_step","notify_max_number","datasource_queries","append_tags","annotations"];
  FIELDS.iter().filter_map(|key|{
-  let a=original.get(key),b=updated.get(key);
+  let a=original.get(key); let b=updated.get(key);
   if a==b{return None}
   Some(OverwriteChange{
    field:key.to_string(),
