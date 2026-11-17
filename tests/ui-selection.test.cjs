@@ -287,3 +287,41 @@ test("import event keeps tag readback audit information",()=>{
  assert.match(node("importRows").innerHTML,/标签待核验/);
  assert.equal(node("importCreated").textContent,1);
 });
+
+test("import confirmation uses structured dialog and does not submit when cancelled",async()=>{
+ const nodes=new Map(),events=new Map();
+ function node(id){
+  if(!nodes.has(id))nodes.set(id,{
+   value:id==="pageSize"?"20":id==="filter"||id==="importFilter"?"all":"",
+   textContent:"",innerHTML:"",disabled:false,checked:false,className:"",style:{},open:false,
+   classList:{add(){},remove(){}},setAttribute(){},scrollIntoView(){},
+   addEventListener(name,fn){events.set(id+":"+name,fn)},
+   appendChild(){},showModal(){this.open=true},close(){this.open=false;events.get(id+":close")?.()}
+  });
+  return nodes.get(id);
+ }
+ let requests=0;
+ const doc={getElementById:node,createElement(){return {value:"",textContent:""}}};
+ const ui=new Function("document","confirm","alert","fetch",script+
+  "\nreturn {init(p){preview=p;selected.clear();for(const r of p.rules)selected.add(r.row);connectionOK=true;render()},confirmImportPlan};")(
+   doc,()=>{throw Error("Native confirm should not be called")},()=>{},async()=>{requests++;throw Error("not expected")}
+  );
+ const rule={row:5,name:"up",group:"prod",exporter:"node",promql:"up",duration:"1m",duration_seconds:60,
+  recovery_seconds:0,repeat_minutes:0,max_repeat_count:0,label_requirements:"host=required",issues:[]};
+ ui.init({preview_id:"fixture",rules:[rule],sheets:[],workbook_warnings:[]});
+ node("group").value="5";node("datasource").value="7";node("confirm").checked=true;
+ const cancelled=ui.confirmImportPlan([5]);
+ assert.equal(node("importConfirmDialog").open,true);
+ assert.equal(node("importConfirmGroup").textContent,"目标业务组 ID：5 · 数据源 ID：7");
+ assert.equal(node("importConfirmTotal").textContent,"1");
+ assert.equal(node("importConfirmTagged").textContent,"0");
+ assert.equal(node("importConfirmUnconfirmed").textContent,"1");
+ assert.match(node("importConfirmWarning").textContent,/尚未逐条确认/);
+ node("cancelImportConfirm").onclick();
+ assert.equal(await cancelled,false);
+ assert.equal(node("importConfirmDialog").open,false);
+ assert.equal(requests,0);
+ const approved=ui.confirmImportPlan([5]);
+ node("approveImportConfirm").onclick();
+ assert.equal(await approved,true);
+});
