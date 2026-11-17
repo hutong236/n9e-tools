@@ -208,21 +208,20 @@ test("rule detail allows J/K/L edits and keeps M collector requirements separate
  ui.init({rules:[rule],sheets:[],workbook_warnings:[]});
  ui.showDetail(rule);
  assert.match(node("detailBody").innerHTML,/留观时长/);
- assert.match(node("detailBody").innerHTML,/采集侧必备标签/);
+ assert.match(node("detailBody").innerHTML,/Excel 辅助信息/);
+ assert.match(node("detailBody").innerHTML,/采集侧标签要求/);
  node("paramRecovery").value="600";
  node("paramRepeat").value="45";
  node("paramLimit").value="3";
- node("paramLabelRequirements").value="host={{主机名}}；env=prod";
  node("paramTags").value="team=ops";
- node("paramLabelConfirmed").checked=true;
  ui.saveRuleParams(rule);
  const params=ui.paramsPayload([5])[5];
  assert.equal(params.recover_duration,600);
  assert.equal(params.notify_repeat_step,45);
  assert.equal(params.notify_max_number,3);
  assert.deepEqual(params.append_tags,["team=ops"]);
- assert.equal(params.label_requirements,"host={{主机名}}；env=prod");
- assert.equal(params.labels_confirmed,true);
+ assert.equal("label_requirements" in params,false);
+ assert.equal("labels_confirmed" in params,false);
  assert.throws(()=>ui.validStaticTags("host={{主机名}}"),/附加标签格式/);
 });
 
@@ -315,8 +314,6 @@ test("import confirmation uses structured dialog and does not submit when cancel
  assert.equal(node("importConfirmGroup").textContent,"目标业务组 ID：5 · 数据源 ID：7");
  assert.equal(node("importConfirmTotal").textContent,"1");
  assert.equal(node("importConfirmTagged").textContent,"0");
- assert.equal(node("importConfirmUnconfirmed").textContent,"1");
- assert.match(node("importConfirmWarning").textContent,/尚未逐条确认/);
  node("cancelImportConfirm").onclick();
  assert.equal(await cancelled,false);
  assert.equal(node("importConfirmDialog").open,false);
@@ -378,4 +375,13 @@ test("single-rule overwrite needs risk acknowledgement, exact name and final cli
  assert.equal(calls[1].url,"/api/overwrite/execute");
  assert.match(node("overwriteStatus").textContent,/回读验证/);
  assert.equal(node("overwriteExecute").disabled,true);
+});
+
+test("non-persisted Excel labels are read-only context and never exported as rule params",()=>{
+ const {ui}=setup();
+ const source=(html.match(/Excel 辅助信息（仅供参考，不参与规则校验或导入）/g)||[]);
+ assert.equal(source.length,1);
+ assert.doesNotMatch(html,/id="paramLabelRequirements"/);
+ assert.doesNotMatch(html,/id="paramLabelConfirmed"/);
+ assert.doesNotMatch(html,/id="importConfirmUnconfirmed"/);
 });
