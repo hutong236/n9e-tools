@@ -614,6 +614,13 @@ mod http_integration_tests {
    url:base.clone(),token:"token".into(),group_id:5,datasource_id:7,
    preview_id:"fixture".into(),row:5,
    parameters:Some(RuleParams{append_tags:vec!["team=ops".into()],..Default::default()})};
+  // An enabled Nightingale rule must be rejected before generating an overwrite ticket.
+  current.lock().unwrap()["disabled"]=serde_json::json!(0);
+  let active=overwrite_prepare(State(state.clone()),Extension(tickets.clone()),Json(mk_prepare())).await;
+  assert!(active.is_err());
+  assert_eq!(active.err().unwrap().0,StatusCode::CONFLICT);
+  assert_eq!(writes.load(Ordering::SeqCst),0);
+  current.lock().unwrap()["disabled"]=serde_json::json!(1);
   let prepared=overwrite_prepare(State(state.clone()),Extension(tickets.clone()),Json(mk_prepare())).await.unwrap().0;
   assert_eq!(prepared.rule_id,98);
   assert_eq!(writes.load(Ordering::SeqCst),0,"prepare is read-only");
@@ -625,6 +632,14 @@ mod http_integration_tests {
   assert!(rejected.is_err());assert_eq!(writes.load(Ordering::SeqCst),0);
   assert!(overwrite_execute(Extension(tickets.clone()),Extension(lock.clone()),
    Json(mk_execute(prepared.ticket,"CPU High"))).await.is_err(),"ticket must be spent even on rejection");
+  let prepared=overwrite_prepare(State(state.clone()),Extension(tickets.clone()),Json(mk_prepare())).await.unwrap().0;
+  // The rule may become enabled after preparation; final execution must fail closed.
+  current.lock().unwrap()["disabled"]=serde_json::json!(0);
+  let active_at_execution=overwrite_execute(Extension(tickets.clone()),Extension(lock.clone()),
+   Json(mk_execute(prepared.ticket,"CPU High"))).await;
+  assert!(active_at_execution.is_err());
+  assert_eq!(writes.load(Ordering::SeqCst),0);
+  current.lock().unwrap()["disabled"]=serde_json::json!(1);
   let prepared=overwrite_prepare(State(state),Extension(tickets.clone()),Json(mk_prepare())).await.unwrap().0;
   let reply=overwrite_execute(Extension(tickets.clone()),Extension(lock),
    Json(mk_execute(prepared.ticket,"CPU High"))).await.unwrap().0;
