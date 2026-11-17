@@ -33,7 +33,21 @@ h1{font-size:24px;line-height:1.3;margin:0;font-weight:750;letter-spacing:-.5px}
 .import-alert{margin-top:14px;padding:11px 13px;border:1px solid #f5d7c8;background:#fff8f1;color:#914c27;border-radius:9px;font-size:12px;line-height:1.65;display:none;white-space:pre-wrap}.import-alert.visible{display:block}
 @media(max-width:700px){.import-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.import-toolbar .field,.import-toolbar .field:first-child{width:100%}}.callout{color:#697c95;font-size:12px;line-height:1.7;margin-top:14px}.callout summary{cursor:pointer}.callout ul{margin:8px 0;padding-left:20px}
 .footerline{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.footerline .muted{color:#7a879b;font-size:12px;line-height:1.5}.checkline{display:flex;align-items:flex-start;gap:9px;margin:0 0 14px;color:#42516a;font-size:13px;line-height:1.6}.checkline input{margin-top:4px}
-dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px));max-height:85vh;box-shadow:0 20px 70px #14233e40}dialog::backdrop{background:#11213b8c}.dialog-head{padding:19px 22px;border-bottom:1px solid #e5eaf0;display:flex;justify-content:space-between;align-items:center;gap:12px}.dialog-body{padding:21px 23px;overflow:auto;max-height:calc(85vh - 83px)}.dialog-title{font-size:17px;margin:0;overflow-wrap:anywhere}.detail-label{font-size:11px;color:#8390a3;font-weight:700;margin:19px 0 8px}.detail-value{white-space:pre-wrap;overflow-wrap:anywhere;color:#344154;font-size:13px;line-height:1.7}.code{background:#f6f8fc;border:1px solid #e6ebf4;border-radius:9px;padding:13px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px));max-height:85vh;box-shadow:0 20px 70px #14233e40}dialog::backdrop{background:#11213b8c}
+#importConfirmDialog{width:min(550px,calc(100vw - 28px))}
+.import-confirm-lead{font-size:13px;line-height:1.7;color:#64748b;margin:5px 0 0}
+.import-confirm-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
+.import-confirm-stat{padding:14px 12px;border:1px solid #e5ebf3;border-radius:12px;background:#f8faff;min-width:0}
+.import-confirm-stat strong{display:block;font-size:23px;line-height:1.3;color:#273951;overflow-wrap:anywhere}
+.import-confirm-stat span{display:block;color:#718096;font-size:12px;margin-top:5px}
+.import-confirm-group{font-size:13px;color:#4a5d76;line-height:1.6}
+.import-confirm-tags{border:1px solid #e5eaf1;background:#f8fafc;border-radius:10px;padding:12px 14px;margin-top:12px}
+.import-confirm-tags strong{font-size:12px}.import-confirm-tags p{font-size:12px;color:#64748b;margin:8px 0 0;overflow-wrap:anywhere}
+.import-confirm-warning{border:1px solid #f0d3a2;background:#fff8ec;color:#8a5413;border-radius:10px;padding:12px 14px;font-size:12px;line-height:1.7;margin:15px 0 0}
+.import-confirm-warning p{margin:0}.import-confirm-warning p+p{margin-top:7px}
+.import-confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+@media(max-width:480px){.import-confirm-summary{grid-template-columns:1fr 1fr}.import-confirm-actions>.btn{flex:1}}
+.dialog-head{padding:19px 22px;border-bottom:1px solid #e5eaf0;display:flex;justify-content:space-between;align-items:center;gap:12px}.dialog-body{padding:21px 23px;overflow:auto;max-height:calc(85vh - 83px)}.dialog-title{font-size:17px;margin:0;overflow-wrap:anywhere}.detail-label{font-size:11px;color:#8390a3;font-weight:700;margin:19px 0 8px}.detail-value{white-space:pre-wrap;overflow-wrap:anywhere;color:#344154;font-size:13px;line-height:1.7}.code{background:#f6f8fc;border:1px solid #e6ebf4;border-radius:9px;padding:13px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .empty{padding:42px;text-align:center;color:#8290a4}.hidden{display:none!important}
 @media(max-width:1080px){.grid-top{grid-template-columns:1fr}.connection-fields{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.shell{padding:16px 12px 50px}.topbar{align-items:flex-start}h1{font-size:20px}.steps{flex-wrap:wrap}.chevron{padding:0 2px}.card-inner{padding:16px}.upload{grid-template-columns:1fr}.connection-fields{grid-template-columns:1fr 1fr}.connection-fields .field:first-child,.connection-fields .field:nth-child(2){grid-column:span 2}.stats{grid-template-columns:repeat(2,1fr)}.toolbar .searchbox,.toolbar .filterbox,.toolbar .groupbox{width:100%}.pagination{flex-wrap:wrap}}
 .param-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0 18px}
@@ -140,6 +154,29 @@ textarea.control{min-height:90px;resize:vertical}
 <div id="targetDatasources" class="target-choices" role="radiogroup" aria-label="数据源"></div>
 <p class="callout">仅选择导入目标，不会创建或修改业务组、数据源；建议选择 Prometheus 兼容数据源用于 PromQL 规则。</p>
 <div class="footerline" style="justify-content:flex-end;margin-top:18px"><button class="btn ghost" id="cancelTargets">取消</button><button class="btn" id="confirmTargets" disabled>确认选择并回填</button></div>
+</div>
+</dialog>
+<dialog id="importConfirmDialog" aria-labelledby="importConfirmTitle" aria-describedby="importConfirmLead">
+<div class="dialog-head">
+<div><h2 class="dialog-title" id="importConfirmTitle">确认导入告警规则</h2><p id="importConfirmLead" class="import-confirm-lead">请核对以下导入范围与配置</p></div>
+<button type="button" class="btn ghost small" id="closeImportConfirm" aria-label="关闭导入确认">关闭</button>
+</div>
+<div class="dialog-body">
+<div id="importConfirmGroup" class="import-confirm-group"></div>
+<div class="import-confirm-summary">
+<div class="import-confirm-stat"><strong id="importConfirmTotal">0</strong><span>待导入规则</span></div>
+<div class="import-confirm-stat"><strong id="importConfirmTagged">0</strong><span>已配置静态标签</span></div>
+<div class="import-confirm-stat"><strong id="importConfirmUnconfirmed">0</strong><span>标签要求待确认</span></div>
+</div>
+<div class="import-confirm-tags"><strong>本次附加标签配置</strong><p id="importConfirmTags">未配置静态附加标签</p></div>
+<div class="import-confirm-warning">
+<p><strong>导入行为：</strong>同业务组已有同名规则将跳过，不会覆盖其配置或附加标签；新建规则默认禁用。</p>
+<p id="importConfirmWarning" class="hidden"></p>
+</div>
+<div class="import-confirm-actions">
+<button type="button" class="btn ghost" id="cancelImportConfirm">取消</button>
+<button type="button" class="btn" id="approveImportConfirm">确认导入</button>
+</div>
 </div>
 </dialog>
 <script>
@@ -510,14 +547,45 @@ async function consumeImportStream(response){
  if(tail){const event=JSON.parse(tail);importEvent(event);if(event.type==="complete"||event.type==="error")terminal=true}
  if(!terminal)throw Error("进度流意外结束；服务端可能仍在执行，请检查夜莺中的实际规则");
 }
+let pendingImportConfirmation=null;
+function settleImportConfirmation(approved){
+ const resolve=pendingImportConfirmation;
+ pendingImportConfirmation=null;
+ if($("importConfirmDialog").open)$("importConfirmDialog").close();
+ if(resolve)resolve(approved);
+}
+$("approveImportConfirm").onclick=()=>settleImportConfirmation(true);
+$("cancelImportConfirm").onclick=()=>settleImportConfirmation(false);
+$("closeImportConfirm").onclick=()=>settleImportConfirmation(false);
+$("importConfirmDialog").addEventListener("close",()=>{
+ if(pendingImportConfirmation){const resolve=pendingImportConfirmation;pendingImportConfirmation=null;resolve(false)}
+});
+function confirmImportPlan(rows){
+ const tagged=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).append_tags.length>0}).length;
+ const chosenTags=[...new Set(rows.flatMap(row=>{const r=getRule(row);return r?currentParams(r).append_tags:[]}))];
+ const unconfirmed=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).label_requirements.trim()&&!currentParams(r).labels_confirmed}).length;
+ $("importConfirmGroup").textContent="目标业务组 ID："+$("group").value+" · 数据源 ID："+$("datasource").value;
+ $("importConfirmTotal").textContent=String(rows.length);
+ $("importConfirmTagged").textContent=String(tagged);
+ $("importConfirmUnconfirmed").textContent=String(unconfirmed);
+ $("importConfirmTags").textContent=chosenTags.length
+  ?chosenTags.slice(0,6).join("、")+(chosenTags.length>6?" 等 "+chosenTags.length+" 种标签":"")
+  :"本次未配置静态附加标签";
+ $("importConfirmWarning").className=unconfirmed?"":"hidden";
+ $("importConfirmWarning").textContent=unconfirmed
+  ?"注意："+unconfirmed+" 条规则的采集侧标签要求尚未逐条确认，请核对指标源是否具备这些标签。":"";
+ return new Promise(resolve=>{
+  pendingImportConfirmation=resolve;
+  $("importConfirmDialog").showModal();
+ });
+}
 $("import").onclick=async()=>{
  if(!preview||!connectionOK||!$("confirm").checked||importing)return;
  const rows=picks();
- const tagged=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).append_tags.length>0}).length;
- const chosenTags=rows.flatMap(row=>{const r=getRule(row);return r?currentParams(r).append_tags:[]});
- const unconfirmed=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).label_requirements.trim()&&!currentParams(r).labels_confirmed}).length;
- if(!rows.length||!confirm("向业务组 "+$("group").value+" 提交 "+rows.length+" 条规则？\n已保存静态附加标签："+tagged+" / "+rows.length+" 条"+(chosenTags.length?"\n例如："+chosenTags.slice(0,4).join("、"):"\n当前没有规则设置静态附加标签。")+
- "\n已有同名规则会直接跳过，已存在的附加标签不会更新；新建规则默认禁用。"+(unconfirmed?"\n⚠ "+unconfirmed+" 条规则的采集侧标签要求尚未人工确认。":"")))return;
+ if(!rows.length)return;
+ if(!await confirmImportPlan(rows))return;
+ // A changed selection or connection while the dialog was open must not be submitted.
+ if(importing||!preview||!connectionOK||!$("confirm").checked||rows.some(row=>!picks().includes(row)))return;
  importing=true;resetImportJob(rows);render();
  try{
   const response=await fetch("/api/import-stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
