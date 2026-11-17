@@ -102,6 +102,8 @@ textarea.control{min-height:90px;resize:vertical}
 <div class="field searchbox"><label for="search">快速搜索</label><input id="search" class="control" placeholder="规则名称、分组、Exporter、PromQL"></div>
 <div class="field filterbox"><label for="filter">校验及状态</label><select id="filter" class="control"><option value="all">全部规则</option><option value="error">有错误</option><option value="warning">有警告</option><option value="valid">可导入</option><option value="selected">已勾选</option><option value="paused">已禁用候选</option></select></div>
 <div class="field groupbox"><label for="groupFilter">规则分组</label><select id="groupFilter" class="control"><option value="">全部分组</option></select></div>
+<div class="field filterbox"><label for="levelFilter">级别</label><select id="levelFilter" class="control"><option value="">全部级别</option></select></div>
+<div class="field filterbox"><label for="severityFilter">严重程度</label><select id="severityFilter" class="control"><option value="">全部严重程度</option></select></div>
 <button class="btn ghost small" id="clearFilters">重置筛选</button>
 </div>
 <div class="selection-bar">
@@ -226,6 +228,8 @@ function filtersMatch(r){
  const q=$("search").value.trim().toLowerCase();
  if(q&&![r.name,r.group,r.exporter,r.promql].some(v=>String(v||"").toLowerCase().includes(q)))return false;
  if($("groupFilter").value&&r.group!==$("groupFilter").value)return false;
+ if($("levelFilter").value&&String(r.excel_level||"")!==$("levelFilter").value)return false;
+ if($("severityFilter").value&&String(r.excel_severity||"")!==$("severityFilter").value)return false;
  const f=$("filter").value;
  if(f==="error")return !isValid(r);
  if(f==="warning")return hasWarning(r);
@@ -268,7 +272,7 @@ function render(){
   const pending=paused.has(r.row),allowed=isValid(r),checked=selected.has(r.row)&&!pending&&allowed;
   const severity=!allowed?'<span class="tag error">错误 '+r.issues.filter(x=>x.level==="error").length+'</span>':hasWarning(r)?'<span class="tag warn">警告 '+r.issues.filter(x=>x.level==="warning").length+'</span>':'<span class="tag success">通过</span>';
   return '<tr class="'+(pending?'is-paused':'')+'"><td class="checkcol"><input aria-label="选择 '+escapeHTML(r.name)+'" class="pick" type="checkbox" data-row="'+r.row+'" '+(checked?'checked ':'')+(!allowed||pending||importing?'disabled ':'')+'></td>'+
-   '<td class="numcol">'+r.row+'</td><td class="rulecol"><div class="rule-name">'+escapeHTML(r.name)+'</div><div class="rule-sub">'+escapeHTML(r.group||"未分类")+(r.exporter?" · "+escapeHTML(r.exporter):"")+'</div></td>'+
+   '<td class="numcol">'+r.row+'</td><td class="rulecol"><div class="rule-name">'+escapeHTML(r.name)+'</div><div class="rule-sub">'+escapeHTML(r.group||"未分类")+(r.exporter?" · "+escapeHTML(r.exporter):"")+(r.excel_level?" · 级别："+escapeHTML(r.excel_level):"")+(r.excel_severity?" · 严重程度："+escapeHTML(r.excel_severity):"")+'</div></td>'+
    '<td style="white-space:nowrap">'+escapeHTML(r.duration)+' <span class="subtitle">('+r.duration_seconds+'s)</span></td>'+ 
    '<td><span class="param-note">留观 '+currentParams(r).recover_duration+' 秒<br>重复 '+currentParams(r).notify_repeat_step+' 分钟 / 上限 '+currentParams(r).notify_max_number+
    (currentParams(r).append_tags.length?'<br><strong>附加标签 '+currentParams(r).append_tags.length+' 个</strong>':'<br>未设置附加标签')+'</span></td>'+
@@ -321,6 +325,7 @@ function showDetail(r){
  const problems=r.issues.map(x=>'<div style="margin:8px 0"><span class="tag '+(x.level==="error"?"error":"warn")+'">'+(x.level==="error"?"错误":"警告")+'</span> '+escapeHTML(x.message)+'</div>').join("");
  $("detailBody").innerHTML='<span class="tag">Excel 第 '+r.row+' 行 · '+escapeHTML(r.group)+' · '+escapeHTML(r.duration)+'</span>'+
  '<div class="detail-label">校验结果</div><div class="detail-value">'+(problems||'<span class="tag success">无错误或警告</span>')+'</div>'+
+ '<div class="detail-label">Excel 级别 / 严重程度（仅筛选用）</div><div class="detail-value">'+escapeHTML((r.excel_level||"未填写")+" / "+(r.excel_severity||"未填写"))+'</div>'+
  '<div class="detail-label">原始 PromQL（实际导入）</div><div class="code">'+escapeHTML(r.promql)+'</div>'+
  '<div class="detail-label">Excel 建议查询（仅供比较，不会写入）</div><div class="code">'+escapeHTML(r.suggested_promql||"未提供")+'</div>'+
  '<div class="param-block"><div class="param-label">告警参数配置 Sheet · J / K / L（可修改并写入夜莺规则）</div>'+
@@ -439,7 +444,8 @@ $("overwriteExecute").onclick=async()=>{
 
 function refilter(){page=1;render()}
 $("search").oninput=refilter;$("filter").onchange=refilter;$("groupFilter").onchange=refilter;
-$("clearFilters").onclick=()=>{$("search").value="";$("filter").value="all";$("groupFilter").value="";refilter()};
+$("levelFilter").onchange=refilter;$("severityFilter").onchange=refilter;
+$("clearFilters").onclick=()=>{$("search").value="";$("filter").value="all";$("groupFilter").value="";$("levelFilter").value="";$("severityFilter").value="";refilter()};
 $("pageSize").onchange=refilter;
 $("prevPage").onclick=()=>{page--;render()};
 $("nextPage").onclick=()=>{page++;render()};
@@ -530,8 +536,14 @@ $("preview").onclick=async()=>{
   preview=data;selected.clear();removed.clear();paused.clear();ruleParams.clear();
   for(const r of data.rules)if(isValid(r))selected.add(r.row);
   $("search").value="";$("filter").value="all";$("groupFilter").innerHTML='<option value="">全部分组</option>';
+  $("levelFilter").innerHTML='<option value="">全部级别</option>';
+  $("severityFilter").innerHTML='<option value="">全部严重程度</option>';
   const groups=[...new Set(data.rules.map(r=>r.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-CN"));
   for(const group of groups){const o=document.createElement("option");o.value=group;o.textContent=group;$("groupFilter").appendChild(o)}
+  for(const [field,select] of [["excel_level","levelFilter"],["excel_severity","severityFilter"]]){
+   const values=[...new Set(data.rules.map(r=>String(r[field]||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-CN",{numeric:true}));
+   for(const value of values){const option=document.createElement("option");option.value=value;option.textContent=value;$(select).appendChild(option)}
+  }
   const errorCount=data.rules.filter(r=>!isValid(r)).length;
   $("summary").textContent="✓ "+file.name+" · "+data.sheets.length+" 个 Sheet · "+data.rules.length+" 条有效规则"+(errorCount?" · "+errorCount+" 条有错误":"");
   $("confirm").checked=false;page=1;render();
