@@ -83,16 +83,16 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  let mut rules=Vec::new();let mut all=0;
  for r in details{
   let rn=get(r,"#row").parse::<u32>().unwrap_or(0);
-  if rn<5||get(r,"B").is_empty()||get(r,"H").is_empty(){continue}all+=1;
+  if rn<5||get(r,"B").is_empty(){continue}all+=1;
   let name=get(r,"B").trim().to_string();let p=params.get(&name);let o=overview.get(&name);
   let v=|m:Option<&HashMap<String,String>>,key:&str|m.map(|r|get(r,key).to_string()).unwrap_or_default();
   let orig=v(p,"G");let overview_d=v(o,"I");let duration=if orig.is_empty(){overview_d.clone()}else{orig.clone()};
   let mut issues=vec![];
   if p.is_none(){issues.push(issue("error","告警参数配置未找到对应规则：影响持续时间和J/K/L参数写入"))}
-  if orig!=overview_d&&!orig.is_empty()&&!overview_d.is_empty(){issues.push(issue("error",format!("持续时间冲突：参数表 {orig} / 清单 {overview_d}")))}
   let parsed_duration=seconds(&duration);
   let duration_seconds=parsed_duration.unwrap_or(0);
   if parsed_duration.is_none() {issues.push(issue("error",format!("原始持续时间无法解析：{duration}")))}
+  if get(r,"H").trim().is_empty(){issues.push(issue("error","原始 PromQL 为空，无法创建告警规则"))}
   if get(r,"H").contains("待确认"){issues.push(issue("error","即将写入的原始 PromQL 含待确认占位符"))}
   let recovery=v(p,"J");let repeat=v(p,"K");let max_repeat=v(p,"L");
   let recovery_parsed=seconds(&recovery);
@@ -102,6 +102,9 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
   if recovery_parsed.is_none(){issues.push(issue("error",format!("告警参数配置 J列：留观时长无法解析：{recovery}")))}
   if repeat_minutes.is_none(){issues.push(issue("error",format!("告警参数配置 K列：重复通知间隔须为整分钟：{repeat}")))}
   if max_repeat_count.is_none(){issues.push(issue("error",format!("告警参数配置 L列：最大重复次数无法解析：{max_repeat}")))}
+  if recovery_parsed.is_some_and(|x|x>86400){issues.push(issue("error","留观时长超过24小时，超出实际导入允许范围"))}
+  if repeat_minutes.is_some_and(|x|x>10080){issues.push(issue("error","重复通知间隔超过7天，超出实际导入允许范围"))}
+  if max_repeat_count.is_some_and(|x|x>10000){issues.push(issue("error","最大重复次数超过10000，超出实际导入允许范围"))}
   let rule=Rule{row:rn,name,group:get(r,"C").into(),exporter:v(o,"B"),category:get(r,"D").into(),promql:get(r,"H").into(),suggested_promql:get(r,"I").into(),duration,duration_seconds,suggested_duration:v(p,"H"),summary:get(r,"J").into(),description:get(r,"K").into(),suggestion:get(r,"L").into(),note:get(r,"R").into(),notification:format!("{} / {} / {}",get(r,"M"),get(r,"N"),get(r,"O")),label_requirements:v(p,"M"),recovery,repeat,max_repeat,recovery_seconds:recovery_parsed.unwrap_or(0),repeat_minutes:repeat_minutes.unwrap_or(0),max_repeat_count:max_repeat_count.unwrap_or(0),issues};
   rules.push(rule)
  }
