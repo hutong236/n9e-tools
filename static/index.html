@@ -277,7 +277,7 @@ function showDetail(r){
   try{saveRuleParams(r)}catch(e){$("paramError").textContent=e.message;$("paramError").className="param-alert visible"}
  };
  $("paramReset").onclick=()=>{ruleParams.delete(r.row);showDetail(r)};
- $("detailDialog").showModal?.();
+ if(!$("detailDialog").open)$("detailDialog").showModal();
 }
 $("closeDialog").onclick=()=>$("detailDialog").close();
 $("detailDialog").onclick=e=>{if(e.target===$("detailDialog"))$("detailDialog").close()};
