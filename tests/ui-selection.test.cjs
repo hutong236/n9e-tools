@@ -225,3 +225,38 @@ test("rule detail allows J/K/L edits and keeps M collector requirements separate
  assert.equal(params.labels_confirmed,true);
  assert.throws(()=>ui.validStaticTags("host={{主机名}}"),/附加标签格式/);
 });
+
+test("invert selection toggles only eligible filtered rules across pagination",()=>{
+ const {ui,node}=setup();
+ node("filter").value="warning";ui.render();
+ const warningRows=ui.filteredRows().map(r=>r.row);
+ assert.equal(warningRows.length,5);
+ node("invert").onclick();
+ assert.equal(ui.picks().length,10);
+ assert.ok(warningRows.every(row=>!ui.selected.has(row)));
+ node("invert").onclick();
+ assert.equal(ui.picks().length,15);
+ node("filter").value="all";
+ node("search").value="rule1";ui.render();
+ node("invert").onclick();
+ assert.equal(ui.picks().length,9);
+ node("search").value="";ui.render();
+ assert.equal(ui.picks().length,9);
+});
+test("invert selection ignores paused and invalid rules",()=>{
+ const {ui,node}=setup();
+ const rules=Array.from({length:15},(_,i)=>({
+  row:i+5,name:"rule"+i,group:i%2?"A":"B",exporter:"node",promql:"up",
+  duration:"1m",duration_seconds:60,issues:[]
+ }));
+ rules.push({row:100,name:"invalid",group:"A",exporter:"node",promql:"",
+  duration:"",duration_seconds:0,issues:[{level:"error",message:"missing"}]});
+ ui.init({rules,sheets:[],selected:16,all_rules:16,workbook_warnings:[]});
+ ui.paused.add(5);ui.selected.delete(5);
+ ui.render();
+ node("invert").onclick();
+ assert.equal(ui.paused.has(5),true);
+ assert.equal(ui.selected.has(5),false);
+ assert.equal(ui.selected.has(100),false);
+ assert.equal(ui.selected.size,0);
+});
