@@ -26,8 +26,8 @@ cargo run --release
 ## Docker 启动
 
 ```bash
-docker build -t n9e-tools:0.6 .
-docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.6
+docker build -t n9e-tools:0.7 .
+docker run --rm -p 127.0.0.1:8088:8088 n9e-tools:0.7
 ```
 
 Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，对远程操作使用受控代理或 VPN。项目的 Web 接口当前没有独立登录功能。
@@ -75,13 +75,13 @@ cargo build --release
 
 进入仓库的 [Actions → Build multi-platform Docker image](https://github.com/hutong236/n9e-tools/actions/workflows/docker-multiarch.yml)，点击 **Run workflow**，选择 `main` 分支并设置：
 
-- `tag`：镜像版本标签，例如 `v0.6.0`（必填，默认 `v0.6.0`）。
+- `tag`：镜像版本标签，例如 `v0.7.0`（必填，默认 `v0.7.0`）。
 - `push_latest`：是否同时覆盖推送 `latest`（默认关闭，发布正式稳定版时才建议勾选）。
 
 工作流使用 Docker Buildx + QEMU，在 GitHub 托管的 Ubuntu Runner 上构建 **linux/amd64** 和 **linux/arm64**，并将统一的多架构 manifest 推送到 GitHub Container Registry：
 
 ```text
-ghcr.io/hutong236/n9e-tools:v0.6.0
+ghcr.io/hutong236/n9e-tools:v0.7.0
 ```
 
 无需额外提供 GHCR 密码。工作流通过 `secrets.GITHUB_TOKEN` 登录，具备 `packages: write` 最小权限。首次发布的 GHCR Package 可见性可能默认为 Private；若需要匿名拉取，请到 GitHub 的 Package Settings 设置为 Public。
@@ -89,16 +89,16 @@ ghcr.io/hutong236/n9e-tools:v0.6.0
 ### 拉取和部署
 
 ```bash
-docker pull ghcr.io/hutong236/n9e-tools:v0.6.0
+docker pull ghcr.io/hutong236/n9e-tools:v0.7.0
 
 docker run --rm -p 127.0.0.1:8088:8088 \
-  ghcr.io/hutong236/n9e-tools:v0.6.0
+  ghcr.io/hutong236/n9e-tools:v0.7.0
 ```
 
 Docker 会按宿主机架构自动选择 amd64 或 arm64 镜像。可以使用：
 
 ```bash
-docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.6.0
+docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.7.0
 ```
 
 检查 manifest 中是否包含两个目标平台。
@@ -118,23 +118,23 @@ docker buildx imagetools inspect ghcr.io/hutong236/n9e-tools:v0.6.0
 
 ## GitHub Actions：手工打包 Linux、macOS 与 Windows 二进制程序
 
-在 [Actions → Build downloadable binaries](https://github.com/hutong236/n9e-tools/actions/workflows/binary-release.yml) 中点击 **Run workflow**，选择 `main`，输入包名标签（默认 `v0.6.0`）。
+在 [Actions → Build downloadable binaries](https://github.com/hutong236/n9e-tools/actions/workflows/binary-release.yml) 中点击 **Run workflow**，选择 `main`，输入包名标签（默认 `v0.7.0`）。
 
 此任务与 Docker 镜像工作流相互独立，不会自动推送镜像。三个平台均成功编译和通过测试后，工作流将**自动创建新的 GitHub Release**，并上传三个压缩包及对应的 SHA-256 校验文件。三台 GitHub Runner 分别原生编译：
 
 | 平台 | Runner | Rust target | 结果 |
 | --- | --- | --- | --- |
-| Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `n9e-tools-v0.6.0-linux-x86_64.tar.gz` |
-| macOS Apple Silicon | `macos-15`（ARM64） | `aarch64-apple-darwin` | `n9e-tools-v0.6.0-macos-arm64.tar.gz` |
-| Windows x86_64（64 位） | `windows-2022` | `x86_64-pc-windows-msvc` | `n9e-tools-v0.6.0-windows-x86_64.zip` |
+| Linux x86_64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `n9e-tools-v0.7.0-linux-x86_64.tar.gz` |
+| macOS Apple Silicon | `macos-15`（ARM64） | `aarch64-apple-darwin` | `n9e-tools-v0.7.0-macos-arm64.tar.gz` |
+| Windows x86_64（64 位） | `windows-2022` | `x86_64-pc-windows-msvc` | `n9e-tools-v0.7.0-windows-x86_64.zip` |
 
 运行成功后，打开 [GitHub Releases](https://github.com/hutong236/n9e-tools/releases)，找到本次输入的版本号，直接下载对应平台的压缩包和 SHA-256 文件。构建过程也会把产物保留在 Actions Artifacts 中（30 天）。每个平台包含可执行程序（Windows 为 `n9e-tools.exe`）和 README。构建会执行 Rust 测试，并通过 `file` 命令检查二进制文件。
 
 Linux 安装示例：
 
 ```bash
-tar -xzf n9e-tools-v0.6.0-linux-x86_64.tar.gz
-cd n9e-tools-v0.6.0-linux-x86_64
+tar -xzf n9e-tools-v0.7.0-linux-x86_64.tar.gz
+cd n9e-tools-v0.7.0-linux-x86_64
 chmod +x n9e-tools
 ./n9e-tools
 ```
@@ -142,8 +142,8 @@ chmod +x n9e-tools
 macOS Apple Silicon 安装示例：
 
 ```bash
-tar -xzf n9e-tools-v0.6.0-macos-arm64.tar.gz
-cd n9e-tools-v0.6.0-macos-arm64
+tar -xzf n9e-tools-v0.7.0-macos-arm64.tar.gz
+cd n9e-tools-v0.7.0-macos-arm64
 chmod +x n9e-tools
 ./n9e-tools
 ```
@@ -178,10 +178,10 @@ Release 地址示例：`https://github.com/hutong236/n9e-tools/releases/tag/v0.4
 
 ### Windows x86_64 运行方法
 
-从对应 [GitHub Release](https://github.com/hutong236/n9e-tools/releases) 下载 `n9e-tools-v0.6.0-windows-x86_64.zip`，解压后在 PowerShell 中执行：
+从对应 [GitHub Release](https://github.com/hutong236/n9e-tools/releases) 下载 `n9e-tools-v0.7.0-windows-x86_64.zip`，解压后在 PowerShell 中执行：
 
 ```powershell
-cd .\\n9e-tools-v0.6.0-windows-x86_64
+cd .\\n9e-tools-v0.7.0-windows-x86_64
 .\\n9e-tools.exe
 ```
 
@@ -213,3 +213,35 @@ NDJSON 事件示例：
 **重要：** 流式页面断开连接不等于已取消服务端任务。服务端可能仍在创建规则，因此页面刷新、浏览器断网或请求异常后，必须先到 Nightingale 核对实际写入情况，不要直接重复点击导入。API 创建成功也不等于规则已被激活（仍默认禁用）。
 
 如部署时经过 Nginx/反向代理，请关闭该接口的响应缓冲，以便逐条进度及时显示。服务端已设置 `X-Accel-Buffering: no`。
+
+## V0.7.0：规则参数详情支持 J、K、L、M 列
+
+已核对原始 Excel 的「告警参数配置」Sheet：J=留观时长、K=重复通知间隔、L=最大重复次数、M=采集侧必备标签。根据「规则配置明细」B 列规则名称匹配「告警参数配置」B 列；匹配不成功或 J/K/L 无法解析会显示校验错误。
+
+- **J（留观时长）**：自动解析分钟到秒，导入 `recover_duration`；页面可以修改秒数。
+- **K（重复通知间隔）**：自动解析到分钟，导入 `notify_repeat_step`；0 代表不重复提醒。
+- **L（最大重复次数）**：支持「0（不限）」等原始格式，导入 `notify_max_number`；0 代表不限制。
+- **M（采集侧必备标签）**：在规则详情中展示并允许编辑、检查、确认。这些标签必须在 exporter、Prometheus 指标或采集侧生效；M 的原文可能包含 `{{主机名}}` 等模板，不能被直接当成静态 `append_tags` 写入夜莺。页面会在有未确认标签时于导入前警告。
+- **静态附加标签**：规则详情新增单独字段，每行一个实际静态 `key=value`（例如 `team=ops`），会导入 `append_tags`。不支持动态占位符，客户端与服务端双重校验。
+
+页面保存后参数仅在本次预览会话中生效；服务端通过 `POST /api/import-stream` 或 `POST /api/import` 的可选 `parameters` 字段应用覆盖值；原始 Excel 源数据不会被修改。参数根据 Excel 行号映射，服务端从已上传工作簿的缓存中匹配规则，不允许客户端提交任意规则内容。后端在创建之前校验覆盖值范围：留观时长 0–86400 秒、重复间隔 0–10080 分钟、最大次数 0–10000、静态标签最多 32 个。
+
+**接口示例：**
+
+```json
+{
+  "preview_id": "已缓存的预览ID",
+  "rows": [5],
+  "parameters": {
+    "5": {
+      "recover_duration": 300,
+      "notify_repeat_step": 60,
+      "notify_max_number": 0,
+      "label_requirements": "env=prod；host={{主机名}}",
+      "append_tags": ["team=ops"]
+    }
+  }
+}
+```
+
+上例只展示新增字段，实际调用仍需 `url`、`token`、`group_id`、`datasource_id`、`confirm` 等原有必填字段。标签确认只用于前置条件核对，不代表工具已验证实际指标具有该标签。
