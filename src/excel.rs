@@ -88,16 +88,12 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
   let v=|m:Option<&HashMap<String,String>>,key:&str|m.map(|r|get(r,key).to_string()).unwrap_or_default();
   let orig=v(p,"G");let overview_d=v(o,"I");let duration=if orig.is_empty(){overview_d.clone()}else{orig.clone()};
   let mut issues=vec![];
-  if p.is_none(){issues.push(issue("error","告警参数配置未找到对应规则"))}
-  if o.is_none(){issues.push(issue("error","严重告警清单未找到对应规则"))}
+  if p.is_none(){issues.push(issue("error","告警参数配置未找到对应规则：影响持续时间和J/K/L参数写入"))}
   if orig!=overview_d&&!orig.is_empty()&&!overview_d.is_empty(){issues.push(issue("error",format!("持续时间冲突：参数表 {orig} / 清单 {overview_d}")))}
   let parsed_duration=seconds(&duration);
   let duration_seconds=parsed_duration.unwrap_or(0);
   if parsed_duration.is_none() {issues.push(issue("error",format!("原始持续时间无法解析：{duration}")))}
-  if get(r,"H").contains("待确认"){issues.push(issue("error","原始 PromQL 含待确认占位符"))}
-  if get(r,"H")!=get(r,"I"){issues.push(issue("warning","原始 PromQL 与建议查询条件不同，按用户要求使用原始值"))}
-  if get(r,"M").contains("待确认")||get(r,"N").contains("待确认")||get(r,"O").contains("待确认"){issues.push(issue("warning","接收组待确认：不自动关联通知规则"))}
-  if v(p,"O").contains("待确认"){issues.push(issue("warning","扩展标签存在占位符：不会作为静态标签写入"))}
+  if get(r,"H").contains("待确认"){issues.push(issue("error","即将写入的原始 PromQL 含待确认占位符"))}
   let recovery=v(p,"J");let repeat=v(p,"K");let max_repeat=v(p,"L");
   let recovery_parsed=seconds(&recovery);
   let repeat_parsed=seconds(&repeat);
@@ -106,12 +102,11 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
   if recovery_parsed.is_none(){issues.push(issue("error",format!("告警参数配置 J列：留观时长无法解析：{recovery}")))}
   if repeat_minutes.is_none(){issues.push(issue("error",format!("告警参数配置 K列：重复通知间隔须为整分钟：{repeat}")))}
   if max_repeat_count.is_none(){issues.push(issue("error",format!("告警参数配置 L列：最大重复次数无法解析：{max_repeat}")))}
-  if v(p,"M").trim().is_empty(){issues.push(issue("warning","告警参数配置 M列：未提供采集侧必备标签"))}
   let rule=Rule{row:rn,name,group:get(r,"C").into(),exporter:v(o,"B"),category:get(r,"D").into(),promql:get(r,"H").into(),suggested_promql:get(r,"I").into(),duration,duration_seconds,suggested_duration:v(p,"H"),summary:get(r,"J").into(),description:get(r,"K").into(),suggestion:get(r,"L").into(),note:get(r,"R").into(),notification:format!("{} / {} / {}",get(r,"M"),get(r,"N"),get(r,"O")),label_requirements:v(p,"M"),recovery,repeat,max_repeat,recovery_seconds:recovery_parsed.unwrap_or(0),repeat_minutes:repeat_minutes.unwrap_or(0),max_repeat_count:max_repeat_count.unwrap_or(0),issues};
   rules.push(rule)
  }
- let mut warnings=vec!["全部有效规则均列入候选，不按颜色筛选；用户可在预览中自行过滤、禁用、删除".into(),"通知路由、消息模板、采集侧标签与待确认事项只作为校验上下文，不自动写入夜莺".into()];
- if sheets.get("待确认事项").map(|a|a.len()).unwrap_or(0)>4{warnings.push("待确认事项存在，请先人工核对生产前置条件".into())}
+ let mut warnings=vec!["全部有效规则均列入候选，不按颜色筛选；用户可在预览中自行过滤、禁用、删除".into(),"通知接收组、采集侧标签要求及Excel建议查询只作参考，不写入夜莺，也不计入规则校验状态".into()];
+
  Ok(Preview{preview_id:String::new(),sheets:names,selected:rules.len(),all_rules:all,rules,workbook_warnings:warnings})
 }
 #[cfg(test)]mod tests{use super::*;
@@ -174,5 +169,6 @@ mod integration_tests {
   assert_eq!(preview.rules[0].max_repeat_count,0);
   assert_eq!(preview.rules[0].label_requirements,"env=prod");
   assert!(preview.rules[0].issues.iter().all(|i|i.level!="error"));
+  assert!(preview.rules[0].issues.is_empty(),"辅助标签及通知信息不应生成规则校验警告");
  }
 }
