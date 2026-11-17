@@ -58,6 +58,15 @@ textarea.control{min-height:90px;resize:vertical}
 .param-alert{display:none;color:#b42331;font-size:12px;white-space:pre-wrap;margin:10px 0}.param-alert.visible{display:block}
 @media(max-width:700px){.param-grid{grid-template-columns:1fr}}
 .target-choices{display:grid;gap:8px;max-height:200px;overflow:auto;border:1px solid #e4eaf1;border-radius:10px;padding:8px;background:#fcfdff}.target-option{width:100%;text-align:left;border:1px solid #e5ebf3;border-radius:9px;background:white;padding:11px 13px;display:flex;justify-content:space-between;gap:12px;align-items:center;color:#304158}.target-option:hover{border-color:#90b5f7;background:#f8fbff}.target-option.chosen{border:2px solid #2563eb;background:#f0f6ff;padding:10px 12px}.target-option small{color:#718096}.target-empty{padding:14px;text-align:center;color:#8190a2}
+.overwrite-action{color:#b45309!important}.overwrite-action:disabled{opacity:.35}
+.overwrite-step{border:1px solid #e3e8f0;border-radius:12px;padding:14px;margin:12px 0;background:#fafbfe}
+.overwrite-step-title{font-weight:700;font-size:13px;margin-bottom:8px}
+.overwrite-diffs{max-height:250px;overflow:auto;border:1px solid #e2e8f0;border-radius:10px}
+.overwrite-diff{padding:11px 13px;border-bottom:1px solid #e2e8f0;font-size:12px}
+.overwrite-diff:last-child{border-bottom:0}.overwrite-diff code{display:block;white-space:pre-wrap;word-break:break-word;font-size:11px;color:#687587;margin:5px 0}
+.overwrite-notice{background:#fff8ed;border:1px solid #f1dcbb;color:#874e0a;padding:12px;border-radius:9px;font-size:12px;line-height:1.7}
+.overwrite-status{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0;color:#b42318}
+#overwriteDialog{width:min(760px,calc(100vw - 28px))}
 </style>
 </head>
 <body>
@@ -179,6 +188,29 @@ textarea.control{min-height:90px;resize:vertical}
 </div>
 </div>
 </dialog>
+<dialog id="overwriteDialog" aria-labelledby="overwriteTitle">
+<div class="dialog-head"><div><h2 class="dialog-title" id="overwriteTitle">单条规则 · 强制覆盖</h2><p class="subtitle">此操作只允许更新一条已有规则，不支持批量覆盖</p></div><button type="button" id="overwriteClose" class="btn ghost small">关闭</button></div>
+<div class="dialog-body">
+<p class="overwrite-notice">覆盖将修改目标 Nightingale 中已有规则的 PromQL、时长、降噪、数据源及附加标签。原有启用/禁用状态、通知关联、生效时段及非本工具管理的配置保留。不删除或重新创建规则。</p>
+<div class="overwrite-step"><div class="overwrite-step-title">第一步 · 确认覆盖目标及配置差异</div>
+<div id="overwriteTarget" class="detail-value"></div><div id="overwriteDiffs" class="overwrite-diffs"></div>
+<label class="checkline" style="margin-top:12px"><input type="checkbox" id="overwriteRisk">我已检查目标规则 ID 和配置差异，了解会覆盖已有的规则配置。</label></div>
+<div class="overwrite-step"><div class="overwrite-step-title">第二步 · 输入完整规则名称</div>
+<p class="subtitle">必须输入与夜莺现有规则完全相同的名称（区分大小写）。</p>
+<input id="overwriteTyped" class="control" autocomplete="off" placeholder="输入规则完整名称" aria-label="输入将被覆盖的规则完整名称">
+</div>
+<div class="overwrite-step" id="overwriteFinalSection"><div class="overwrite-step-title">第三步 · 最终确认（一次性凭据）</div>
+<p class="subtitle">完成前两步后点击「进入最终确认」，再点击「确认覆盖这一条规则」。操作凭据有效期为 5 分钟，且只能使用一次。</p>
+<div id="overwriteFinalWarning" class="overwrite-notice hidden">这是最后一次确认。提交后将直接修改这一条 Nightingale 告警规则，无法通过本工具撤销。请先在 Nightingale 备份原有规则。</div>
+</div>
+<div id="overwriteStatus" class="overwrite-status" role="status" aria-live="polite"></div>
+<div class="import-confirm-actions">
+<button id="overwriteCancel" type="button" class="btn ghost">取消</button>
+<button id="overwriteNext" type="button" class="btn" disabled>进入最终确认</button>
+<button id="overwriteExecute" type="button" class="btn danger hidden">确认覆盖这一条规则</button>
+</div>
+</div>
+</dialog>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
@@ -244,7 +276,7 @@ function render(){
    (currentParams(r).append_tags.length?'<br><strong>附加标签 '+currentParams(r).append_tags.length+' 个</strong>':'<br>未设置附加标签')+'</span></td>'+
    '<td class="querycol"><div class="query-preview" title="'+escapeHTML(r.promql)+'">'+escapeHTML(r.promql)+'</div></td>'+
    '<td><div class="validation">'+severity+(pending?'<span class="tag">候选禁用</span>':'')+'</div></td>'+
-   '<td><div class="row-actions"><button type="button" class="btn text small detail" data-row="'+r.row+'">详情</button><button type="button" class="btn text small toggle" data-row="'+r.row+'" '+(importing?'disabled':'')+'>'+(pending?'恢复':'禁用')+'</button><button type="button" class="btn text small danger-text remove" data-row="'+r.row+'" '+(importing?'disabled':'')+'>删除</button></div></td></tr>';
+   '<td><div class="row-actions"><button type="button" class="btn text small detail" data-row="'+r.row+'">详情</button><button type="button" class="btn text small overwrite-action" data-row="'+r.row+'" '+(!allowed||importing||!connectionOK?'disabled':'')+'>覆盖</button><button type="button" class="btn text small toggle" data-row="'+r.row+'" '+(importing?'disabled':'')+'>'+(pending?'恢复':'禁用')+'</button><button type="button" class="btn text small danger-text remove" data-row="'+r.row+'" '+(importing?'disabled':'')+'>删除</button></div></td></tr>';
  }).join("")||'<tr><td class="empty" colspan="8">没有符合筛选条件的规则。可重置筛选条件或恢复已删除规则。</td></tr>';
  $("paginationMeta").textContent="显示 "+(matches.length?(page-1)*size+1:0)+"–"+Math.min(page*size,matches.length)+" / "+matches.length+" 条";
  $("pageInfo").textContent=page+" / "+pageCount;
@@ -331,11 +363,87 @@ $("rules").addEventListener("click",e=>{
  const button=e.target.closest("button[data-row]");if(!button)return;
  const row=Number(button.dataset.row),r=getRule(row);if(!r)return;
  if(button.classList.contains("detail"))return showDetail(r);
+ if(button.classList.contains("overwrite-action"))return startOverwrite(r);
  if(importing)return;
  if(button.classList.contains("toggle")){if(paused.has(row))paused.delete(row);else{paused.add(row);selected.delete(row)}}
  if(button.classList.contains("remove")){removed.add(row);selected.delete(row);paused.delete(row)}
  render();
 });
+let overwritePending=null,overwriteBusy=false;
+function overwriteCanProceed(){
+ if(!overwritePending||overwriteBusy)return false;
+ return $("overwriteRisk").checked&&$("overwriteTyped").value===overwritePending.name;
+}
+function renderOverwriteSteps(){
+ $("overwriteNext").disabled=!overwriteCanProceed();
+}
+function closeOverwriteDialog(){
+ if(overwriteBusy)return;
+ overwritePending=null;
+ $("overwriteDialog").close();
+}
+$("overwriteClose").onclick=closeOverwriteDialog;
+$("overwriteCancel").onclick=closeOverwriteDialog;
+$("overwriteDialog").addEventListener("close",()=>{if(!overwriteBusy)overwritePending=null});
+$("overwriteRisk").onchange=renderOverwriteSteps;
+$("overwriteTyped").oninput=renderOverwriteSteps;
+const overwriteFieldNames={rule_config:"PromQL 查询配置",note:"备注",prom_for_duration:"触发持续时间",
+ prom_eval_interval:"评估间隔",recover_duration:"恢复留观时长",notify_repeat_step:"重复通知间隔",
+ notify_max_number:"最大重复次数",datasource_queries:"关联数据源",append_tags:"静态附加标签",annotations:"告警摘要与说明"};
+async function startOverwrite(r){
+ if(!r||!connectionOK||importing||overwriteBusy||!isValid(r))return;
+ overwriteBusy=true;render();
+ const source={url:$("url").value.trim(),token:$("token").value,group_id:Number($("group").value),
+  datasource_id:Number($("datasource").value),preview_id:preview.preview_id,row:r.row,parameters:currentParams(r)};
+ try{
+  const response=await fetch("/api/overwrite/prepare",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(source)});
+  const data=await response.json();
+  if(!response.ok)throw Error(data.error||"无法准备覆盖");
+  overwritePending={...source,ticket:data.ticket,rule_id:data.rule_id,name:data.name,stage:1};
+  $("overwriteTarget").textContent="业务组 "+source.group_id+" · Excel 行 "+r.row+" · 夜莺规则 ID "+data.rule_id+" · "+data.name;
+  $("overwriteDiffs").innerHTML=(data.changes||[]).map(item=>'<div class="overwrite-diff"><strong>'+escapeHTML(overwriteFieldNames[item.field]||item.field)+'</strong><code>原值：'+escapeHTML(item.before)+'</code><code>覆盖为：'+escapeHTML(item.after)+'</code></div>').join("");
+  $("overwriteRisk").checked=false;$("overwriteTyped").value="";
+  $("overwriteStatus").textContent="";
+  $("overwriteNext").classList.remove("hidden");
+  $("overwriteExecute").classList.add("hidden");
+  $("overwriteFinalWarning").classList.add("hidden");
+  renderOverwriteSteps();
+  $("overwriteDialog").showModal();
+ }catch(e){alert("无法打开覆盖确认："+e.message)}
+ finally{overwriteBusy=false;render()}
+}
+$("overwriteNext").onclick=()=>{
+ if(!overwriteCanProceed())return;
+ overwritePending.stage=2;
+ $("overwriteNext").classList.add("hidden");
+ $("overwriteExecute").classList.remove("hidden");
+ $("overwriteFinalWarning").classList.remove("hidden");
+};
+$("overwriteExecute").onclick=async()=>{
+ const p=overwritePending;
+ if(!p||overwriteBusy||p.stage!==2||!overwriteCanProceed())return;
+ if(!connectionOK||!preview||preview.preview_id!==p.preview_id||
+  Number($("group").value)!==p.group_id||Number($("datasource").value)!==p.datasource_id||
+  $("url").value.trim()!==p.url||!getRule(p.row)||getRule(p.row).name!==p.name){
+  $("overwriteStatus").textContent="目标连接或预览已改变，请关闭后重新准备覆盖。";return;
+ }
+ overwriteBusy=true;$("overwriteExecute").disabled=true;$("overwriteStatus").textContent="正在执行单条覆盖并回读验证，请勿重复提交…";render();
+ try{
+  const res=await fetch("/api/overwrite/execute",{method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({url:p.url,token:p.token,group_id:p.group_id,datasource_id:p.datasource_id,
+    preview_id:p.preview_id,row:p.row,ticket:p.ticket,expected_rule_id:p.rule_id,typed_name:$("overwriteTyped").value,
+    confirm_overwrite:true})});
+  const result=await res.json();
+  if(!res.ok)throw Error(result.error||"覆盖请求失败");
+  $("overwriteStatus").textContent=result.verified?"覆盖成功且关键字段已回读验证。":
+   "更新接口已接受，但部分字段未回读一致："+(result.mismatch_fields||[]).join("、")+"；请在夜莺确认。";
+  overwritePending=null;
+  $("overwriteExecute").disabled=true;
+  $("overwriteExecute").textContent="已处理";
+ }catch(e){$("overwriteStatus").textContent="覆盖中止："+e.message+"\n本次一次性凭据可能已消耗，请核对夜莺规则后重新查看差异。";}
+ finally{overwriteBusy=false;render()}
+};
+
 function refilter(){page=1;render()}
 $("search").oninput=refilter;$("filter").onchange=refilter;$("groupFilter").onchange=refilter;
 $("clearFilters").onclick=()=>{$("search").value="";$("filter").value="all";$("groupFilter").value="";refilter()};
