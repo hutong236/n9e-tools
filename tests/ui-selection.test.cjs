@@ -262,7 +262,7 @@ test("invert selection ignores paused and invalid rules",()=>{
 
 test("placeholder example is not treated as configured append_tags",()=>{
  assert.doesNotMatch(html,/id="paramTags"[^>]*placeholder="team=ops/);
- assert.match(script,/append_tags:\[\],labels_confirmed:false/);
+ assert.match(script,/notify_max_number:r\.max_repeat_count\?\?0,append_tags:\[\]/);
 });
 test("import event keeps tag readback audit information",()=>{
  const nodes=new Map();
