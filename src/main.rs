@@ -481,7 +481,7 @@ mod tests {
  #[test]
  fn validates_rule_parameter_overrides(){
   let rule=excel::Rule{
-   row:5,name:"rule".into(),group:String::new(),exporter:String::new(),category:String::new(),
+   row:5,name:"rule".into(),group:String::new(),exporter:String::new(),category:String::new(),excel_level:String::new(),excel_severity:String::new(),
    promql:"up == 0".into(),suggested_promql:String::new(),duration:"1m".into(),duration_seconds:60,
    suggested_duration:String::new(),summary:String::new(),description:String::new(),suggestion:String::new(),
    note:String::new(),notification:String::new(),label_requirements:"host={{主机名}}".into(),
@@ -510,7 +510,7 @@ mod tests {
  #[test]
  fn overwrite_payload_preserves_runtime_state_and_only_one_query(){
   let rule=excel::Rule{
-   row:5,name:"CPU High".into(),group:String::new(),exporter:String::new(),category:String::new(),
+   row:5,name:"CPU High".into(),group:String::new(),exporter:String::new(),category:String::new(),excel_level:String::new(),excel_severity:String::new(),
    promql:"up == 0".into(),suggested_promql:String::new(),duration:"2m".into(),duration_seconds:120,
    suggested_duration:String::new(),summary:"new summary".into(),description:"new description".into(),
    suggestion:String::new(),note:"new note".into(),notification:String::new(),
@@ -596,7 +596,7 @@ mod http_integration_tests {
   let addr=listener.local_addr().unwrap();
   tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
   let base=format!("http://{addr}");
-  let rule=Rule{row:5,name:"CPU High".into(),group:String::new(),exporter:String::new(),category:String::new(),
+  let rule=Rule{row:5,name:"CPU High".into(),group:String::new(),exporter:String::new(),category:String::new(),excel_level:String::new(),excel_severity:String::new(),
    promql:"up == 0".into(),suggested_promql:String::new(),duration:"2m".into(),duration_seconds:120,
    suggested_duration:String::new(),summary:"updated".into(),description:String::new(),suggestion:String::new(),
    note:String::new(),notification:String::new(),label_requirements:String::new(),
@@ -734,7 +734,7 @@ mod http_integration_tests {
   let addr=listener.local_addr().unwrap();
   tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
   let build_rule=|row:u32,name:&str|Rule{
-   row,name:name.into(),group:"synthetic".into(),exporter:"test".into(),category:"test".into(),
+   row,name:name.into(),group:"synthetic".into(),exporter:"test".into(),category:"test".into(),excel_level:String::new(),excel_severity:String::new(),
    promql:"vector(1)>0".into(),suggested_promql:String::new(),
    duration:"0m".into(),duration_seconds:0,suggested_duration:"1m".into(),
    summary:"test".into(),description:String::new(),suggestion:String::new(),
