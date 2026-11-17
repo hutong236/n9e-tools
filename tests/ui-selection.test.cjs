@@ -183,3 +183,45 @@ test("NDJSON stream parser handles events split between network chunks",async()=
  assert.equal(ui.getJob().processed,1);
  assert.equal(ui.getJob().created,1);
 });
+
+test("rule detail allows J/K/L edits and keeps M collector requirements separate from static tags",()=>{
+ const nodes=new Map();
+ function node(id){
+  if(!nodes.has(id))nodes.set(id,{
+   value:id==="pageSize"?"20":id==="filter"||id==="importFilter"?"all":"",
+   checked:false,textContent:"",innerHTML:"",disabled:false,className:"",
+   style:{},setAttribute(){},scrollIntoView(){},
+   classList:{add(){},remove(){}},addEventListener(){},appendChild(){},
+   showModal(){this.open=true},close(){this.open=false}
+  });
+  return nodes.get(id);
+ }
+ const document={getElementById:node,createElement(){return {value:"",textContent:""}}};
+ const ui=new Function("document","confirm","alert","fetch",script+
+  "\nreturn {init(p){preview=p;render()},showDetail,saveRuleParams,paramsPayload,currentParams,ruleParams,validStaticTags};")(
+   document,()=>true,()=>{},async()=>{throw Error("unexpected fetch")}
+  );
+ const rule={row:5,name:"Linux-NodeDown",group:"node-exporter",exporter:"node",promql:"up == 0",
+   duration:"1m",duration_seconds:60,recovery:"5 分钟",repeat:"60 分钟",max_repeat:"0（不限）",
+   recovery_seconds:300,repeat_minutes:60,max_repeat_count:0,
+   label_requirements:"host={{主机名}}；env=prod",issues:[]};
+ ui.init({rules:[rule],sheets:[],workbook_warnings:[]});
+ ui.showDetail(rule);
+ assert.match(node("detailBody").innerHTML,/留观时长/);
+ assert.match(node("detailBody").innerHTML,/采集侧必备标签/);
+ node("paramRecovery").value="600";
+ node("paramRepeat").value="45";
+ node("paramLimit").value="3";
+ node("paramLabelRequirements").value="host={{主机名}}；env=prod";
+ node("paramTags").value="team=ops";
+ node("paramLabelConfirmed").checked=true;
+ ui.saveRuleParams(rule);
+ const params=ui.paramsPayload([5])[5];
+ assert.equal(params.recover_duration,600);
+ assert.equal(params.notify_repeat_step,45);
+ assert.equal(params.notify_max_number,3);
+ assert.deepEqual(params.append_tags,["team=ops"]);
+ assert.equal(params.label_requirements,"host={{主机名}}；env=prod");
+ assert.equal(params.labels_confirmed,true);
+ assert.throws(()=>ui.validStaticTags("host={{主机名}}"),/附加标签格式/);
+});
