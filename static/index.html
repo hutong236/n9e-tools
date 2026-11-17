@@ -36,7 +36,7 @@ h1{font-size:24px;line-height:1.3;margin:0;font-weight:750;letter-spacing:-.5px}
 dialog{border:0;border-radius:16px;padding:0;width:min(780px,calc(100vw - 32px));max-height:85vh;box-shadow:0 20px 70px #14233e40}dialog::backdrop{background:#11213b8c}
 #importConfirmDialog{width:min(550px,calc(100vw - 28px))}
 .import-confirm-lead{font-size:13px;line-height:1.7;color:#64748b;margin:5px 0 0}
-.import-confirm-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
+.import-confirm-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0}
 .import-confirm-stat{padding:14px 12px;border:1px solid #e5ebf3;border-radius:12px;background:#f8faff;min-width:0}
 .import-confirm-stat strong{display:block;font-size:23px;line-height:1.3;color:#273951;overflow-wrap:anywhere}
 .import-confirm-stat span{display:block;color:#718096;font-size:12px;margin-top:5px}
@@ -175,12 +175,10 @@ textarea.control{min-height:90px;resize:vertical}
 <div class="import-confirm-summary">
 <div class="import-confirm-stat"><strong id="importConfirmTotal">0</strong><span>待导入规则</span></div>
 <div class="import-confirm-stat"><strong id="importConfirmTagged">0</strong><span>已配置静态标签</span></div>
-<div class="import-confirm-stat"><strong id="importConfirmUnconfirmed">0</strong><span>标签要求待确认</span></div>
 </div>
 <div class="import-confirm-tags"><strong>本次附加标签配置</strong><p id="importConfirmTags">未配置静态附加标签</p></div>
 <div class="import-confirm-warning">
 <p><strong>导入行为：</strong>同业务组已有同名规则将跳过，不会覆盖其配置或附加标签；新建规则默认禁用。</p>
-<p id="importConfirmWarning" class="hidden"></p>
 </div>
 <div class="import-confirm-actions">
 <button type="button" class="btn ghost" id="cancelImportConfirm">取消</button>
@@ -286,8 +284,7 @@ function render(){
 }
 function defaultParams(r){
  return {recover_duration:r.recovery_seconds??0,notify_repeat_step:r.repeat_minutes??0,
-  notify_max_number:r.max_repeat_count??0,label_requirements:r.label_requirements??"",
-  append_tags:[],labels_confirmed:false};
+  notify_max_number:r.max_repeat_count??0,append_tags:[]};
 }
 function currentParams(r){return ruleParams.get(r.row)||defaultParams(r)}
 function paramsPayload(rows){
@@ -312,12 +309,9 @@ function saveRuleParams(r){
   const number=value(id);
   if(!Number.isSafeInteger(number)||number<0||number>max)throw Error(name+"必须是0至"+max+"的整数");
  }
- const labels=$("paramLabelRequirements").value.trim();
- if(labels.length>4000)throw Error("采集侧标签要求不得超过4000字符");
  const tags=validStaticTags($("paramTags").value);
  ruleParams.set(r.row,{recover_duration:value("paramRecovery"),notify_repeat_step:value("paramRepeat"),
-  notify_max_number:value("paramLimit"),label_requirements:labels,
-  append_tags:tags,labels_confirmed:$("paramLabelConfirmed").checked});
+  notify_max_number:value("paramLimit"),append_tags:tags});
  $("detailDialog").close();render();
 }
 function showDetail(r){
@@ -335,16 +329,14 @@ function showDetail(r){
  '<div class="field"><label for="paramRepeat">K 列 · 重复通知间隔（分钟）</label><input id="paramRepeat" class="control" type="number" min="0" max="10080" step="1" value="'+p.notify_repeat_step+'"><span class="param-note">Excel 原值：'+escapeHTML(r.repeat||"未提供")+'；0 代表不重复提醒</span></div>'+
  '<div class="field"><label for="paramLimit">L 列 · 最大重复次数</label><input id="paramLimit" class="control" type="number" min="0" max="10000" step="1" value="'+p.notify_max_number+'"><span class="param-note">Excel 原值：'+escapeHTML(r.max_repeat||"未提供")+'；0 代表不限制</span></div>'+
  '</div></div>'+
- '<div class="param-block"><div class="param-label">M 列 · 采集侧必备标签（校验要求，不是规则静态标签）</div>'+
- '<textarea id="paramLabelRequirements" class="control" rows="3">'+escapeHTML(p.label_requirements)+'</textarea>'+
- '<p class="param-note">该列包含主机名、应用标识等动态值，必须在采集器 / 指标源提供；不会自动写入 Nightingale append_tags。</p>'+
- '<label class="checkline"><input id="paramLabelConfirmed" type="checkbox" '+(p.labels_confirmed?'checked':'')+'>我已核对指标采集侧的必备标签要求</label>'+
- '<div class="field"><label for="paramTags">规则静态附加标签（可选，写入 append_tags）</label>'+
+ '<div class="param-block"><div class="param-label">规则静态附加标签（可选，实际写入 Nightingale append_tags）</div>'+
+ '<div class="field"><label for="paramTags">静态标签，每行一个 key=value</label>'+
  '<textarea id="paramTags" class="control" rows="2" placeholder="请在此实际输入，每行一个标签，如 team=ops">'+escapeHTML(p.append_tags.join("\n"))+'</textarea>'+
  '<span class="param-note"><strong>灰色提示不是已配置值。</strong> 请实际输入后点击下方「保存当前规则参数」；导入前将显示已保存标签数量。每行一个静态 key=value，不支持动态占位符。</span></div></div>'+
  '<div id="paramError" class="param-alert"></div><div class="footerline" style="justify-content:flex-end"><button type="button" class="btn ghost" id="paramReset">恢复 Excel 默认值</button><button type="button" class="btn" id="paramSave">保存当前规则参数</button></div>'+
  '<div class="detail-label">摘要 / 描述 / 处理建议</div><div class="detail-value">'+escapeHTML([r.summary,r.description,r.suggestion].filter(Boolean).join("\n\n")||"未提供")+'</div>'+
- '<div class="detail-label">通知与前置条件</div><div class="detail-value">'+escapeHTML(r.notification||"无")+'</div>';
+ '<div class="detail-label">Excel 辅助信息（仅供参考，不参与规则校验或导入）</div>'+
+ '<div class="detail-value">采集侧标签要求：'+escapeHTML(r.label_requirements||"无")+'\n通知接收组说明：'+escapeHTML(r.notification||"无")+'</div>';
  $("paramSave").onclick=()=>{
   try{saveRuleParams(r)}catch(e){$("paramError").textContent=e.message;$("paramError").className="param-alert visible"}
  };
@@ -672,17 +664,12 @@ $("importConfirmDialog").addEventListener("close",()=>{
 function confirmImportPlan(rows){
  const tagged=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).append_tags.length>0}).length;
  const chosenTags=[...new Set(rows.flatMap(row=>{const r=getRule(row);return r?currentParams(r).append_tags:[]}))];
- const unconfirmed=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).label_requirements.trim()&&!currentParams(r).labels_confirmed}).length;
  $("importConfirmGroup").textContent="目标业务组 ID："+$("group").value+" · 数据源 ID："+$("datasource").value;
  $("importConfirmTotal").textContent=String(rows.length);
  $("importConfirmTagged").textContent=String(tagged);
- $("importConfirmUnconfirmed").textContent=String(unconfirmed);
  $("importConfirmTags").textContent=chosenTags.length
   ?chosenTags.slice(0,6).join("、")+(chosenTags.length>6?" 等 "+chosenTags.length+" 种标签":"")
   :"本次未配置静态附加标签";
- $("importConfirmWarning").className=unconfirmed?"":"hidden";
- $("importConfirmWarning").textContent=unconfirmed
-  ?"注意："+unconfirmed+" 条规则的采集侧标签要求尚未逐条确认，请核对指标源是否具备这些标签。":"";
  return new Promise(resolve=>{
   pendingImportConfirmation=resolve;
   $("importConfirmDialog").showModal();
