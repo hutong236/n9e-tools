@@ -271,8 +271,8 @@ function showDetail(r){
  '<p class="param-note">该列包含主机名、应用标识等动态值，必须在采集器 / 指标源提供；不会自动写入 Nightingale append_tags。</p>'+
  '<label class="checkline"><input id="paramLabelConfirmed" type="checkbox" '+(p.labels_confirmed?'checked':'')+'>我已核对指标采集侧的必备标签要求</label>'+
  '<div class="field"><label for="paramTags">规则静态附加标签（可选，写入 append_tags）</label>'+
- '<textarea id="paramTags" class="control" rows="2" placeholder="team=ops&#10;env=prod">'+escapeHTML(p.append_tags.join("\n"))+'</textarea>'+
- '<span class="param-note">每行一个静态 key=value，不支持动态占位符，不能代替采集侧标签。</span></div></div>'+
+ '<textarea id="paramTags" class="control" rows="2" placeholder="请在此实际输入，每行一个标签，如 team=ops">'+escapeHTML(p.append_tags.join("\n"))+'</textarea>'+
+ '<span class="param-note"><strong>灰色提示不是已配置值。</strong> 请实际输入后点击下方「保存当前规则参数」；导入前将显示已保存标签数量。每行一个静态 key=value，不支持动态占位符。</span></div></div>'+
  '<div id="paramError" class="param-alert"></div><div class="footerline" style="justify-content:flex-end"><button type="button" class="btn ghost" id="paramReset">恢复 Excel 默认值</button><button type="button" class="btn" id="paramSave">保存当前规则参数</button></div>'+
  '<div class="detail-label">摘要 / 描述 / 处理建议</div><div class="detail-value">'+escapeHTML([r.summary,r.description,r.suggestion].filter(Boolean).join("\n\n")||"未提供")+'</div>'+
  '<div class="detail-label">通知与前置条件</div><div class="detail-value">'+escapeHTML(r.notification||"无")+'</div>';
