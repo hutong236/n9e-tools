@@ -77,7 +77,7 @@ async fn discover(Json(req):Json<DiscoverRequest>)->Result<Json<DiscoverResult>,
  let datasources=parse_options(&ds_json,"datasource").map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  Ok(Json(DiscoverResult{groups,datasources}))
 }
-#[derive(Clone,Serialize)]struct ResultRow{row:u32,name:String,status:String,message:String}
+#[derive(Clone,Serialize)]struct ResultRow{row:u32,name:String,status:String,message:String,#[serde(skip_serializing_if="Vec::is_empty")]tags_requested:Vec<String>,#[serde(skip_serializing_if="Option::is_none")]tags_verification:Option<String>}
 #[derive(Serialize)]struct ImportResult{created:usize,skipped:usize,failed:usize,items:Vec<ResultRow>}
 fn error(code:StatusCode,msg:impl Into<String>)->(StatusCode,Json<Value>){(code,Json(serde_json::json!({"error":msg.into()})))}
 async fn index()->Html<&'static str>{Html(include_str!("../static/index.html"))}
@@ -145,6 +145,45 @@ async fn emit_update(tx:&Option<tokio::sync::mpsc::Sender<Bytes>>, value:Value){
   }
  }
 }
+
+fn observed_append_tags(rule:&Value)->Option<Vec<String>>{
+ let v=rule.get("append_tags").or_else(||rule.get("append_tags_json"))?;
+ if let Some(a)=v.as_array(){
+  return Some(a.iter().filter_map(Value::as_str).map(str::to_owned).collect());
+ }
+ if let Some(txt)=v.as_str(){
+  return Some(txt.split_whitespace().map(str::to_owned).collect());
+ }
+ None
+}
+async fn check_created_tags(client:&reqwest::Client,uri:&str,token:&str,name:&str,tags:&[String])->(String,String){
+ let response=match client.get(uri).header("X-User-Token",token).send().await{
+  Ok(response)=>response,
+  Err(e)=>return ("unverified".into(),format!("创建请求已被接受，但回读失败：{e}"))
+ };
+ let value=match api_json(response).await{
+  Ok(value)=>value,
+  Err(e)=>return ("unverified".into(),format!("创建请求已被接受，但回读接口异常：{e}"))
+ };
+ let list=match extract_list(&value){
+  Ok(list)=>list,
+  Err(e)=>return ("unverified".into(),format!("创建请求已被接受，但无法读取规则列表：{e}"))
+ };
+ let Some(saved)=list.iter().find(|x|x.get("name").and_then(Value::as_str)==Some(name))else{
+  return ("unverified".into(),"创建请求已被接受，但回读列表未找到该规则；可能存在同步延迟".into())
+ };
+ let Some(actual)=observed_append_tags(saved)else{
+  return ("unverified".into(),"创建请求已被接受，但回读列表未包含 append_tags 字段；无法确认标签是否持久化".into())
+ };
+ let expected:HashSet<&str>=tags.iter().map(String::as_str).collect();
+ let found:HashSet<&str>=actual.iter().map(String::as_str).collect();
+ if expected.is_subset(&found){
+  ("verified".into(),format!("附加标签回读验证成功（{} 个）",tags.len()))
+ }else{
+  let missing:Vec<&str>=expected.difference(&found).copied().collect();
+  ("mismatch".into(),format!("创建 API 已接受，但回读未发现标签：{}；请检查 Nightingale 规则详情",missing.join(", ")))
+ }
+}
 async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync::mpsc::Sender<Bytes>>)->Result<ImportResult,(StatusCode,Json<Value>)>{
  if !req.confirm{return Err(error(StatusCode::BAD_REQUEST,"必须先确认导入"))}
  if req.token.trim().is_empty()||req.group_id==0||req.datasource_id==0{return Err(error(StatusCode::BAD_REQUEST,"Token、业务组ID和数据源ID必填"))}
@@ -174,9 +213,9 @@ async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync
  for (index,r) in rules.iter().enumerate(){
   emit_update(&updates,serde_json::json!({"type":"current","index":index+1,"row":r.row,"name":r.name})).await;
   let item=if names.contains(&r.name){
-   ResultRow{row:r.row,name:r.name.clone(),status:"skipped".into(),message:"同业务组内已存在同名规则".into()}
+   ResultRow{row:r.row,name:r.name.clone(),status:"skipped".into(),message:"同业务组内已存在同名规则；未修改已有规则及附加标签".into(),tags_requested:Vec::new(),tags_verification:None}
   }else if excel::seconds(&r.duration).is_none()||r.promql.is_empty()||r.name.is_empty()||r.issues.iter().any(|i|i.level=="error"){
-   ResultRow{row:r.row,name:r.name.clone(),status:"invalid".into(),message:"规则校验不通过".into()}
+   ResultRow{row:r.row,name:r.name.clone(),status:"invalid".into(),message:"规则校验不通过".into(),tags_requested:Vec::new(),tags_verification:None}
   }else{
    let (recovery,repeat,count,tags)=checked_params(r,req.parameters.get(&r.row)).expect("validated before import");
    let payload=serde_json::json!({
@@ -196,9 +235,18 @@ async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync
    match outcome{
     Ok(())=>{
      names.insert(r.name.clone());
-     ResultRow{row:r.row,name:r.name.clone(),status:"created".into(),message:"API已接受创建请求（默认禁用）".into()}
+     {
+     if tags.is_empty(){
+      ResultRow{row:r.row,name:r.name.clone(),status:"created".into(),message:"API已接受创建请求（默认禁用）；未配置静态附加标签".into(),tags_requested:tags,tags_verification:None}
+     }else{
+      let (verification,detail)=check_created_tags(&client,&uri,&req.token,&r.name,&tags).await;
+      ResultRow{row:r.row,name:r.name.clone(),status:"created".into(),
+       message:format!("API已接受创建请求（默认禁用）；{detail}"),
+       tags_requested:tags,tags_verification:Some(verification)}
+     }
+    }
     },
-    Err(e)=>ResultRow{row:r.row,name:r.name.clone(),status:"failed".into(),message:e}
+    Err(e)=>ResultRow{row:r.row,name:r.name.clone(),status:"failed".into(),message:e,tags_requested:tags,tags_verification:None}
    }
   };
   match item.status.as_str(){
@@ -252,6 +300,14 @@ mod tests {
   assert!(creation_result(&serde_json::json!({"dat":{"example":""},"err":null}),"example").is_ok());
   assert!(creation_result(&serde_json::json!({"dat":{"example":"rule already exists"}}),"example").is_err());
   assert!(creation_result(&serde_json::json!({"dat":{}}),"example").is_err());
+ }
+ #[test]
+ fn recognizes_readback_append_tags(){
+  let rule=serde_json::json!({"name":"test","append_tags":["team=ops","env=prod"]});
+  assert_eq!(observed_append_tags(&rule).unwrap(),vec!["team=ops","env=prod"]);
+  let alt=serde_json::json!({"append_tags_json":"team=ops env=prod"});
+  assert_eq!(observed_append_tags(&alt).unwrap(),vec!["team=ops","env=prod"]);
+  assert_eq!(observed_append_tags(&serde_json::json!({"name":"old"})),None);
  }
  #[test]
  fn validates_rule_static_tags(){
