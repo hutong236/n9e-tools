@@ -330,15 +330,15 @@ async fn overwrite_execute(
  let _write_guard=write_lock.lock().await;
  let client=reqwest::Client::builder().timeout(Duration::from_secs(20)).redirect(reqwest::redirect::Policy::none()).build().map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
  let latest=fetch_rule_detail(&client,&base,&req.token,plan.rule_id).await?;
- if latest!=plan.original{return Err(error(StatusCode::CONFLICT,"夜莺规则自预览后发生变化，禁止覆盖；请重新查看差异"))}
- if !alert_identity(&latest,plan.rule_id,&plan.name,plan.group_id){return Err(error(StatusCode::CONFLICT,"规则身份检查失败"))}
  if !overwrite_target_disabled(&latest){return Err(error(StatusCode::CONFLICT,"禁止覆盖：目标规则目前不是 Disabled（disabled=1），请先在 Nightingale 停用并重新确认"))}
+ if !alert_identity(&latest,plan.rule_id,&plan.name,plan.group_id){return Err(error(StatusCode::CONFLICT,"规则身份检查失败"))}
+ if latest!=plan.original{return Err(error(StatusCode::CONFLICT,"夜莺规则自预览后发生变化，禁止覆盖；请重新查看差异"))}
  let uri=format!("{base}/api/n9e/busi-group/{}/alert-rule/{}",plan.group_id,plan.rule_id);
  let response=client.put(&uri).header("X-User-Token",&req.token).json(&plan.updated).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,format!("覆盖请求失败：{e}")))?;
  api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  let saved=fetch_rule_detail(&client,&base,&req.token,plan.rule_id).await?;
  let mut mismatch=Vec::new();
- for field in ["rule_config","prom_for_duration","recover_duration","notify_repeat_step","notify_max_number","append_tags","datasource_queries"]{
+ for field in ["disabled","rule_config","prom_for_duration","recover_duration","notify_repeat_step","notify_max_number","append_tags","datasource_queries"]{
   if saved.get(field)!=plan.updated.get(field){mismatch.push(field)}
  }
  Ok(Json(serde_json::json!({"rule_id":plan.rule_id,"name":plan.name,
