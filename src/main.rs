@@ -543,6 +543,76 @@ mod http_integration_tests {
   assert_eq!(items[1].kind,"prometheus");
  }
  #[tokio::test]
+ async fn overwrite_flow_is_one_rule_one_time_and_preserves_enabled_state(){
+  use std::sync::atomic::{AtomicUsize,Ordering};
+  let current=Arc::new(Mutex::new(serde_json::json!({
+   "id":98,"name":"CPU High","group_id":5,"cate":"prometheus","prod":"metric",
+   "disabled":0,"notify_rule_ids":[13],"append_tags":["team=old"],
+   "rule_config":{"queries":[{"prom_ql":"up == 1","severity":1}]},
+   "annotations":{"summary":"old"},"prom_for_duration":60,
+   "prom_eval_interval":30,"recover_duration":0,"notify_repeat_step":0,"notify_max_number":0,
+   "datasource_queries":[{"match_type":0,"op":"in","values":[7]}]
+  })));
+  let writes=Arc::new(AtomicUsize::new(0));
+  let mock=Router::new()
+   .route("/api/n9e/busi-group/5/alert-rules",get({
+     move ||async {Json(serde_json::json!({"err":null,"dat":[{"id":98,"name":"CPU High"}]}))}
+   }))
+   .route("/api/n9e/alert-rule/98/pure",get({
+     let current=current.clone();
+     move ||{let current=current.clone();async move{Json(serde_json::json!({"err":null,"dat":current.lock().unwrap().clone()}))}}
+   }))
+   .route("/api/n9e/busi-group/5/alert-rule/98",axum::routing::put({
+     let current=current.clone();let writes=writes.clone();
+     move |Json(body):Json<Value>|{
+      let current=current.clone();let writes=writes.clone();
+      async move{writes.fetch_add(1,Ordering::SeqCst);*current.lock().unwrap()=body;Json(serde_json::json!({"err":null}))}
+     }
+   }));
+  let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let addr=listener.local_addr().unwrap();
+  tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
+  let base=format!("http://{addr}");
+  let rule=Rule{row:5,name:"CPU High".into(),group:String::new(),exporter:String::new(),category:String::new(),
+   promql:"up == 0".into(),suggested_promql:String::new(),duration:"2m".into(),duration_seconds:120,
+   suggested_duration:String::new(),summary:"updated".into(),description:String::new(),suggestion:String::new(),
+   note:String::new(),notification:String::new(),label_requirements:String::new(),
+   recovery:"0m".into(),repeat:"10m".into(),max_repeat:"2".into(),
+   recovery_seconds:0,repeat_minutes:10,max_repeat_count:2,issues:Vec::<Issue>::new()};
+  let state:AppState=Arc::new(Mutex::new(HashMap::new()));
+  state.lock().unwrap().insert("fixture".into(),Preview{
+   preview_id:"fixture".into(),sheets:vec![],selected:1,all_rules:1,
+   rules:vec![rule],workbook_warnings:vec![]});
+  let tickets:OverwriteState=Arc::new(Mutex::new(HashMap::new()));
+  let lock:OverwriteWriteLock=Arc::new(tokio::sync::Mutex::new(()));
+  let mk_prepare=||OverwritePrepareRequest{
+   url:base.clone(),token:"token".into(),group_id:5,datasource_id:7,
+   preview_id:"fixture".into(),row:5,
+   parameters:Some(RuleParams{append_tags:vec!["team=ops".into()],..Default::default()})};
+  let prepared=overwrite_prepare(State(state.clone()),Extension(tickets.clone()),Json(mk_prepare())).await.unwrap().0;
+  assert_eq!(prepared.rule_id,98);
+  assert_eq!(writes.load(Ordering::SeqCst),0,"prepare is read-only");
+  let mk_execute=|ticket:String,typed_name:&str|OverwriteExecuteRequest{
+   url:base.clone(),token:"token".into(),group_id:5,datasource_id:7,preview_id:"fixture".into(),
+   row:5,ticket,expected_rule_id:98,typed_name:typed_name.into(),confirm_overwrite:true};
+  let rejected=overwrite_execute(Extension(tickets.clone()),Extension(lock.clone()),
+   Json(mk_execute(prepared.ticket.clone(),"wrong name"))).await;
+  assert!(rejected.is_err());assert_eq!(writes.load(Ordering::SeqCst),0);
+  assert!(overwrite_execute(Extension(tickets.clone()),Extension(lock.clone()),
+   Json(mk_execute(prepared.ticket,"CPU High"))).await.is_err(),"ticket must be spent even on rejection");
+  let prepared=overwrite_prepare(State(state),Extension(tickets.clone()),Json(mk_prepare())).await.unwrap().0;
+  let reply=overwrite_execute(Extension(tickets.clone()),Extension(lock),
+   Json(mk_execute(prepared.ticket,"CPU High"))).await.unwrap().0;
+  assert_eq!(reply["updated"],true);
+  assert_eq!(reply["verified"],true);
+  assert_eq!(writes.load(Ordering::SeqCst),1,"one update and no deletes");
+  let saved=current.lock().unwrap();
+  assert_eq!(saved["disabled"],0);
+  assert_eq!(saved["notify_rule_ids"],serde_json::json!([13]));
+  assert_eq!(saved["append_tags"],serde_json::json!(["team=ops"]));
+  assert_eq!(saved["rule_config"]["queries"][0]["prom_ql"],"up == 0");
+ }
+ #[tokio::test]
  async fn discovers_groups_and_datasources(){
   let mock=Router::new()
    .route("/api/n9e/busi-groups",get(||async{Json(serde_json::json!({"dat":[{"id":2,"name":"Linux生产"}],"err":null}))}))
