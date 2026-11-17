@@ -325,3 +325,57 @@ test("import confirmation uses structured dialog and does not submit when cancel
  node("approveImportConfirm").onclick();
  assert.equal(await approved,true);
 });
+
+test("single-rule overwrite needs risk acknowledgement, exact name and final click",async()=>{
+ const nodes=new Map(),events=new Map();
+ const classes=()=>{const c=new Set(["hidden"]);return {add(x){c.add(x)},remove(x){c.delete(x)},contains(x){return c.has(x)}}};
+ const node=id=>{
+  if(!nodes.has(id))nodes.set(id,{
+   value:id==="pageSize"?"20":id==="filter"||id==="importFilter"?"all":"",
+   textContent:"",innerHTML:"",checked:false,disabled:false,className:"",style:{},open:false,
+   classList:classes(),setAttribute(){},scrollIntoView(){},appendChild(){},
+   showModal(){this.open=true},close(){this.open=false},
+   addEventListener(event,cb){events.set(id+":"+event,cb)}
+  });
+  return nodes.get(id);
+ };
+ const calls=[];
+ const mockFetch=async(url,opts)=>{
+  const body=JSON.parse(opts.body);calls.push({url,body});
+  if(url==="/api/overwrite/prepare"){
+   assert.equal(body.row,5);
+   return {ok:true,json:async()=>({ticket:"one-time",rule_id:98,name:"CPU",changes:[{field:"append_tags",before:"[]",after:'["team=ops"]'}]})};
+  }
+  if(url==="/api/overwrite/execute"){
+   assert.equal(body.ticket,"one-time");
+   assert.equal(body.expected_rule_id,98);
+   assert.equal(body.typed_name,"CPU");
+   return {ok:true,json:async()=>({updated:true,verified:true,mismatch_fields:[]})};
+  }
+  throw Error("unexpected URL");
+ };
+ const document={getElementById:node,createElement(){return {value:"",textContent:""}}};
+ const ui=new Function("document","confirm","alert","fetch",script+
+  "\nreturn {init(p){preview=p;connectionOK=true;selected.clear();for(const r of p.rules)selected.add(r.row);render()},startOverwrite};")(
+  document,()=>true,()=>{},mockFetch);
+ const rule={row:5,name:"CPU",group:"production",exporter:"node",promql:"up==0",duration:"1m",
+  duration_seconds:60,recovery_seconds:0,repeat_minutes:60,max_repeat_count:0,label_requirements:"",issues:[]};
+ node("url").value="http://n9e.local";node("token").value="t";node("group").value="5";node("datasource").value="7";
+ ui.init({preview_id:"p1",rules:[rule],workbook_warnings:[],sheets:[]});
+ await ui.startOverwrite(rule);
+ assert.equal(node("overwriteDialog").open,true);
+ assert.equal(calls.length,1,"prepare must never write");
+ assert.equal(node("overwriteNext").disabled,true);
+ node("overwriteRisk").checked=true;node("overwriteTyped").value="wrong";
+ node("overwriteTyped").oninput();
+ assert.equal(node("overwriteNext").disabled,true);
+ node("overwriteTyped").value="CPU";node("overwriteTyped").oninput();
+ assert.equal(node("overwriteNext").disabled,false);
+ node("overwriteNext").onclick();
+ assert.equal(calls.length,1,"second step still must not write");
+ await node("overwriteExecute").onclick();
+ assert.equal(calls.length,2,"only final confirmation may write");
+ assert.equal(calls[1].url,"/api/overwrite/execute");
+ assert.match(node("overwriteStatus").textContent,/回读验证/);
+ assert.equal(node("overwriteExecute").disabled,true);
+});
