@@ -508,7 +508,8 @@ async function consumeImportStream(response){
 $("import").onclick=async()=>{
  if(!preview||!connectionOK||!$("confirm").checked||importing)return;
  const rows=picks();
- if(!rows.length||!confirm("向业务组 "+$("group").value+" 提交 "+rows.length+" 条规则？\n已有同名规则跳过，新建规则默认禁用。"))return;
+ const unconfirmed=rows.filter(row=>{const r=getRule(row);return r&&currentParams(r).label_requirements.trim()&&!currentParams(r).labels_confirmed}).length;
+ if(!rows.length||!confirm("向业务组 "+$("group").value+" 提交 "+rows.length+" 条规则？\\n已有同名规则跳过，新建规则默认禁用。"+(unconfirmed?"\\n⚠ "+unconfirmed+" 条规则的采集侧标签前置条件尚未逐条确认，请确保对应标签已在指标中提供。":"")))return;
  importing=true;resetImportJob(rows);render();
  try{
   const response=await fetch("/api/import-stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
