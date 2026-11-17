@@ -1,6 +1,6 @@
 [package]
 name = "n9e-tools"
-version = "0.7.4"
+version = "0.7.5"
 edition = "2021"
 description = "Nightingale v8 Excel alert rule importer"
 license = "MIT"
