@@ -261,6 +261,24 @@ mod tests {
   assert!(!validate_append_tag("bad key=x"));
  }
  #[test]
+ fn validates_rule_parameter_overrides(){
+  let rule=excel::Rule{
+   row:5,name:"rule".into(),group:String::new(),exporter:String::new(),category:String::new(),
+   promql:"up == 0".into(),suggested_promql:String::new(),duration:"1m".into(),duration_seconds:60,
+   suggested_duration:String::new(),summary:String::new(),description:String::new(),suggestion:String::new(),
+   note:String::new(),notification:String::new(),label_requirements:"host={{主机名}}".into(),
+   recovery:"5 分钟".into(),repeat:"60 分钟".into(),max_repeat:"0（不限）".into(),
+   recovery_seconds:300,repeat_minutes:60,max_repeat_count:0,issues:vec![]
+  };
+  let overrides=RuleParams{recover_duration:Some(600),notify_repeat_step:Some(45),
+   notify_max_number:Some(3),label_requirements:None,append_tags:vec!["team=ops".into()]};
+  let (r,n,m,tags)=checked_params(&rule,Some(&overrides)).unwrap();
+  assert_eq!((r,n,m),(600,45,3));
+  assert_eq!(tags,vec!["team=ops"]);
+  let invalid=RuleParams{append_tags:vec!["host={{主机名}}".into()],..Default::default()};
+  assert!(checked_params(&rule,Some(&invalid)).is_err());
+ }
+ #[test]
  fn existing_rule_list_shapes(){
   assert_eq!(extract_list(&serde_json::json!({"dat":[{"name":"a"}]})).unwrap().len(),1);
   assert_eq!(extract_list(&serde_json::json!({"dat":{"list":[{"name":"a"}],"total":1}})).unwrap().len(),1);
@@ -339,6 +357,9 @@ mod http_integration_tests {
     assert_eq!(v["name"],"new");
     assert_eq!(v["disabled"],1);
     assert_eq!(v["prom_for_duration"],0);
+    assert_eq!(v["recover_duration"],300);
+    assert_eq!(v["notify_repeat_step"],60);
+    assert_eq!(v["notify_max_number"],0);
     assert_eq!(v["datasource_queries"][0]["values"][0],3);
     assert_eq!(v["rule_config"]["queries"][0]["prom_ql"],"vector(1)>0");
     Json(serde_json::json!({"dat":{"new":""},"err":null}))
