@@ -360,6 +360,7 @@ async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync
  let base=valid_url(&req.url).map_err(|e|error(StatusCode::BAD_REQUEST,e))?;
  let client=reqwest::Client::builder().timeout(Duration::from_secs(20)).redirect(reqwest::redirect::Policy::none()).build().map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?;
  let uri=format!("{base}/api/n9e/busi-group/{}/alert-rules",req.group_id);
+ let create_uri=format!("{uri}/import");
  let response=client.get(&uri).header("X-User-Token",&req.token).send().await.map_err(|e|error(StatusCode::BAD_GATEWAY,e.to_string()))?;
  let existing=api_json(response).await.map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
  let existing=extract_list(&existing).map_err(|e|error(StatusCode::BAD_GATEWAY,e))?;
@@ -386,22 +387,22 @@ async fn import_core(state:AppState,req:ImportRequest,updates:Option<tokio::sync
     "enable_stimes":["00:00"],"enable_etimes":["00:00"],
     "enable_days_of_weeks":[["0","1","2","3","4","5","6"]],
     "annotations":{"summary":r.summary,"description":r.description,"suggestion":r.suggestion},
-    "append_tags":tags,"notify_rule_ids":[],
+    "append_tags":tags,"notify_version":1,"notify_rule_ids":[],
     "rule_config":{"queries":[{"prom_ql":r.promql,"severity":1}]},
     "notify_repeat_step":repeat,"notify_max_number":count,"recover_duration":recovery
    });
-   let res=client.post(&uri).header("X-User-Token",&req.token).json(&vec![payload]).send().await;
+   let res=client.post(&create_uri).header("X-User-Token",&req.token).json(&vec![payload]).send().await;
    let outcome=match res{Ok(response)=>api_json(response).await.and_then(|v|creation_result(&v,&r.name)),Err(e)=>Err(e.to_string())};
    match outcome{
     Ok(())=>{
      names.insert(r.name.clone());
      {
      if tags.is_empty(){
-      ResultRow{row:r.row,name:r.name.clone(),status:"created".into(),message:"API已接受创建请求（默认禁用）；未配置静态附加标签".into(),tags_requested:tags,tags_verification:None}
+      ResultRow{row:r.row,name:r.name.clone(),status:"created".into(),message:"新版通知模式已创建（默认禁用）；尚未绑定通知规则；未配置静态附加标签".into(),tags_requested:tags,tags_verification:None}
      }else{
       let (verification,detail)=check_created_tags(&client,&uri,&req.token,&r.name,&tags).await;
       ResultRow{row:r.row,name:r.name.clone(),status:"created".into(),
-       message:format!("API已接受创建请求（默认禁用）；{detail}"),
+       message:format!("新版通知模式已创建（默认禁用）；尚未绑定通知规则；{detail}"),
        tags_requested:tags,tags_verification:Some(verification)}
      }
     }
@@ -457,6 +458,11 @@ async fn import_stream(State(state):State<AppState>,Json(req):Json<ImportRequest
 #[cfg(test)]
 mod tests {
  use super::*;
+ #[test]
+ fn nightingale_v8_notify_import_route_is_explicit(){
+  let list_uri="https://n9e.example/api/n9e/busi-group/5/alert-rules";
+  assert_eq!(format!("{list_uri}/import"),"https://n9e.example/api/n9e/busi-group/5/alert-rules/import");
+ }
  #[test]
  fn nightingale_result_map() {
   assert!(creation_result(&serde_json::json!({"dat":{"example":""},"err":null}),"example").is_ok());
