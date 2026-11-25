@@ -149,7 +149,7 @@ textarea.control{min-height:90px;resize:vertical}
 </div>
 <div class="import-table-wrap"><table class="import-table"><thead><tr><th>序号</th><th>Excel 行</th><th>规则名称</th><th>状态</th><th>说明</th></tr></thead><tbody id="importRows"><tr><td colspan="5" class="empty">导入开始后逐条展示结果</td></tr></tbody></table></div>
 <div class="import-count" id="importVisible">暂无记录</div>
-<p class="callout">创建成功表示 Nightingale API 接受请求，规则仍默认禁用；跳过表示同业务组存在同名规则。中断时部分规则可能已写入，请核对夜莺实际规则，不要立即重复导入。</p>
+<p class="callout">创建成功表示 Nightingale API 接受请求，规则仍默认禁用且采用新版通知模式；需要在夜莺中关联通知规则后再启用。跳过表示同业务组存在同名规则，原有通知模式不会改变。中断时部分规则可能已写入，请核对夜莺实际规则，不要立即重复导入。</p>
 </div>
 </div></section>
 <div class="callout" style="margin-top:8px">安全提示：本工具当前无独立登录鉴权，请仅部署在可信内网。API 返回创建成功不代表告警已启用或通知渠道已配置。</div>
@@ -180,7 +180,7 @@ textarea.control{min-height:90px;resize:vertical}
 </div>
 <div class="import-confirm-tags"><strong>本次附加标签配置</strong><p id="importConfirmTags">未配置静态附加标签</p></div>
 <div class="import-confirm-warning">
-<p><strong>导入行为：</strong>同业务组已有同名规则将跳过，不会覆盖其配置或附加标签；新建规则默认禁用。</p>
+<p><strong>导入行为：</strong>同业务组已有同名规则将跳过，不会覆盖其配置或附加标签；新建规则默认禁用，并使用 Nightingale v8 新版通知模式。创建后需在夜莺中手动关联通知规则并启用告警；本工具不会自动发送通知或升级旧版同名规则。</p>
 </div>
 <div class="import-confirm-actions">
 <button type="button" class="btn ghost" id="cancelImportConfirm">取消</button>
