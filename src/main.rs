@@ -722,12 +722,15 @@ mod http_integration_tests {
  #[tokio::test]
  async fn import_uses_array_payload_disables_rules_and_skips_existing() {
   let mock=Router::new().route("/api/n9e/busi-group/1/alert-rules",
-   get(||async{Json(serde_json::json!({"dat":[{"name":"already"}],"err":null}))})
-   .post(|Json(body):Json<Value>|async move{
+   get(||async{Json(serde_json::json!({"dat":[{"name":"already"}],"err":null}))}))
+   .route("/api/n9e/busi-group/1/alert-rules/import",
+   post(|Json(body):Json<Value>|async move{
     assert!(body.is_array(),"Nightingale v8 create API accepts an array");
     let v=&body[0];
     assert_eq!(v["name"],"new");
     assert_eq!(v["disabled"],1);
+    assert_eq!(v["notify_version"],1,"v8 notification rules require new notification mode");
+    assert_eq!(v["notify_rule_ids"],serde_json::json!([]));
     assert_eq!(v["prom_for_duration"],0);
     assert_eq!(v["recover_duration"],300);
     assert_eq!(v["notify_repeat_step"],60);
