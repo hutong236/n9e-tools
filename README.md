@@ -50,7 +50,7 @@ Docker 容器内监听 0.0.0.0:8088，推荐仅在宿主机 loopback 绑定，�
 }
 ```
 
-服务端会从缓存的原始 Excel 解析结果取回上述行，不接受客户端直接替换 PromQL/持续时间。查询已有规则失败会停止写入，以避免无法正确执行同名跳过。使用 `X-User-Token`，对接 `GET/POST /api/n9e/busi-group/:id/alert-rules`，设置 `datasource_queries` 限定实例。创建接口发送**单元素 JSON 数组**，并检查 `dat` 中对应规则名的错误字符串。顶层 `prom_ql` 为空，表达式放在 `rule_config.queries`。
+服务端会从缓存的原始 Excel 解析结果取回上述行，不接受客户端直接替换 PromQL/持续时间。查询已有规则失败会停止写入，以避免无法正确执行同名跳过。使用 `X-User-Token`，通过 `GET /api/n9e/busi-group/:id/alert-rules` 查询重复名称，通过 `POST /api/n9e/busi-group/:id/alert-rules/import` 创建（Nightingale v8 新版导入接口），设置 `datasource_queries` 限定实例。创建请求明确发送 `notify_version: 1` 和空的 `notify_rule_ids: []`，使新建规则可在 Nightingale 中关联新版通知规则；**默认不会自动关联任何通知规则，规则仍以 `disabled=1` 创建**。创建接口发送**单元素 JSON 数组**，并检查 `dat` 中对应规则名的错误字符串。顶层 `prom_ql` 为空，表达式放在 `rule_config.queries`。
 
 ## 当前验收状态及限制
 
@@ -290,3 +290,10 @@ NDJSON 事件示例：
 规则列表现在支持按 Excel 的 **级别** 与 **严重程度** 分别筛选，并可与规则分组、校验状态及快速搜索叠加使用。筛选选项从上传的工作簿中实际存在的非空值动态生成，重置筛选会同时清空两个条件。数据来自「规则配置明细」表对应标题列；如果缺失，尝试按规则名称读取「严重告警清单」中的同名标题列。不会根据其他含义的列猜测级别。
 
 这两个字段属于 **Excel 分类元数据**：可在预览和规则详情中查看，用于选择候选规则，**不会修改 Nightingale 新建规则所用的严重级别（目前固定 S1）**，也不会参与导入配置校验。若上传的模板中找不到对应标题，筛选框仅显示“全部级别 / 全部严重程度”，不会虚构选项。
+
+### Nightingale v8 新版通知规则兼容性
+
+- 新建告警规则使用 `POST /api/n9e/busi-group/:id/alert-rules/import`，不是旧的 `POST /api/n9e/busi-group/:id/alert-rules`。这与 Nightingale v8 服务端导入流程保持一致。
+- 请求显式传递 `notify_version: 1`、`notify_rule_ids: []`。用户仍须到 Nightingale 告警规则详情中**选择并保存需要关联的通知规则**，最后按审核流程启用告警；不选通知规则则不会凭空发送通知。
+- **此修复只针对新创建的告警规则。** 本工具继续遵循“同名跳过”，不会擅自升级之前以 `notify_version: 0` 创建的告警规则。旧规则需在 Nightingale UI 中手动切换到新版通知并关联规则，或经过另行审核的迁移操作处理。
+- 单条强制覆盖仍保留原告警规则的通知设置，不会把已有规则的旧通知模式悄悄改为新版，避免意外更改现有通知行为。
