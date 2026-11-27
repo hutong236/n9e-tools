@@ -77,7 +77,7 @@ textarea.control{min-height:90px;resize:vertical}
 <section class="card"><div class="card-inner">
 <div class="section-head"><div><h2 class="section-title"><span class="section-num">1</span>上传 Excel</h2><p class="section-desc">读取全部有效告警规则，不按标红颜色筛选</p></div><a class="btn ghost small template-link" href="/api/template" download="n9e-alert-rules-template.xlsx">下载 Excel 模板</a></div>
 <div class="upload"><div class="field"><label for="file">工作簿 .xlsx</label><input id="file" type="file" class="control" accept=".xlsx"></div><button class="btn" id="preview">解析规则</button></div>
-<p class="section-desc" style="margin-top:10px">首次使用请下载模板，保留 11 个工作表和列顺序；按「说明」填写规则配置明细及告警参数配置后上传。模板不包含任何生产规则。</p>
+<p class="section-desc" style="margin-top:10px">首次使用请下载模板，保留 11 个工作表和列顺序。第 5 行为完整案例（自动跳过，不导入），请按「说明」从第 6 行填写正式规则后上传。</p>
 <div id="summary" class="file-info" role="status" aria-live="polite"></div>
 </div></section>
 <section class="card"><div class="card-inner">
