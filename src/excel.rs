@@ -86,6 +86,103 @@ pub fn repeat_count(value:&str)->Option<u64>{
  digits.parse().ok()
 }
 fn issue(level:&str,message:impl Into<String>)->Issue{Issue{level:level.into(),message:message.into()}}
+
+const TEMPLATE_SHEETS:[&str;11]=["说明","严重告警清单","规则配置明细","告警参数配置","告警参数规范","采集侧标签配置","告警侧派生标签","host_ip 可派生性","通知路由配置","消息模板","待确认事项"];
+
+// The downloadable workbook is generated from the parser's schema, not from
+// private production data. No candidate rules are pre-populated.
+fn template_rows()->Vec<Vec<Vec<&'static str>>>{
+ let mut sheets=vec![
+  vec![
+   vec!["Nightingale v8 告警规则导入模板"],
+   vec!["填写说明：保留全部 11 个工作表及列顺序；从第 5 行开始录入规则。"],
+   vec!["步骤","填写要求","示例（仅供参考，不会导入）"],
+   vec!["1. 规则配置明细","B 列告警名称、H 列原始 PromQL 必填；J/K/L 列可填写摘要、描述、处理建议。","Example-TargetDown；up == 0"],
+   vec!["2. 告警参数配置","B 列名称必须与规则配置明细完全一致；G/J/K/L 列必填。","Example-TargetDown；1m；300s；60 分钟；0（不限）"],
+   vec!["3. 严重告警清单","可选：按 E 列规则名称关联 B 列 Exporter、I 列持续时间（G 列原始时长为空时备用）。","Example-TargetDown；node-exporter；1m"],
+   vec!["4. 级别与严重程度","规则配置明细 F/G 列用于筛选；不影响新建规则固定 S1 的设置。","严重；S1"],
+   vec!["5. 时间格式","持续时间支持 0m；留观时长支持秒/分钟；重复通知必须为整分钟。","0m；5 分钟；60 分钟"],
+   vec!["6. 重复次数","填写非负整数，0 表示不限；重复通知间隔填 0 表示不重复。","0（不限）"],
+   vec!["7. 标签与通知","静态附加标签在工具详情中配置。采集侧标签及通知接收组仅供参考；新建规则使用新版通知模式，须人工关联通知规则。","team=ops"],
+   vec!["8. 安全","新建规则默认 Disabled；同名规则跳过；不要在模板内填写 Token 或凭据。"],
+   vec!["9. 辅助工作表","其余工作表仅保留兼容结构，可留空；无需人工构造生产数据。"],
+  ],
+  vec![vec!["严重告警清单"],vec!["可选参考清单；E 列名称应与规则配置明细 B 列一致。"],vec![],vec!["序号","Exporter","告警分组","监控对象","告警名称（夜莺 Rule）","严重程度","级别","原始告警名","持续时长 for（清单现值）"]],
+  vec![vec!["规则配置明细"],vec!["B/H 必填；F/G 仅用于筛选。请从第 5 行填写，不要修改列顺序。"],vec![],vec!["序号","告警名称（夜莺 Rule）","告警分组","监控对象","原始告警名","严重程度","级别","原始 PromQL","建议查询（仅参考）","告警摘要","告警描述","处理建议","通知接收组（仅参考）","通知渠道（仅参考）","通知路由（仅参考）","预留","预留","备注"]],
+  vec![vec!["告警参数配置"],vec!["B/G/J/K/L 必填；B 列必须与规则配置明细完全一致。请从第 5 行填写。"],vec![],vec!["序号","告警名称（夜莺 Rule）","告警分组","原始告警名","告警阈值","故障性质","持续时长 for（清单现值）","建议持续时长","持续时长差异","留观时长","重复通知间隔","最大重复次数","采集侧必备标签（仅参考）","预留","告警侧扩展标签（仅参考）"]],
+ ];
+ for &name in &TEMPLATE_SHEETS[4..]{
+  sheets.push(vec![vec![name],vec!["辅助工作表（兼容保留，当前工具不导入本表内容，可留空）"]]);
+ }
+ sheets
+}
+fn xml_text(value:&str)->String{
+ value.replace('&',"&amp;").replace('<',"&lt;").replace('>',"&gt;")
+}
+fn xlsx_part(zip:&mut zip::ZipWriter<Cursor<Vec<u8>>>,path:&str,xml:&str)->Result<(),String>{
+ use std::io::Write;
+ zip.start_file(path,zip::write::SimpleFileOptions::default()).map_err(|e|e.to_string())?;
+ zip.write_all(xml.as_bytes()).map_err(|e|e.to_string())
+}
+fn build_template_workbook(sheets:&[Vec<Vec<&str>>])->Result<Vec<u8>,String>{
+ const DECL:&str=r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#;
+ const NS:&str="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+ const REL:&str="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+ const PKG_REL:&str="http://schemas.openxmlformats.org/package/2006/relationships";
+ let mut zip=zip::ZipWriter::new(Cursor::new(Vec::new()));
+ let mut types=format!(r#"{DECL}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>"#);
+ let mut workbook=format!(r#"{DECL}<workbook xmlns="{NS}" xmlns:r="{REL}"><sheets>"#);
+ let mut relations=format!(r#"{DECL}<Relationships xmlns="{PKG_REL}">"#);
+ for (i,name) in TEMPLATE_SHEETS.iter().enumerate(){
+  let n=i+1;
+  types.push_str(&format!(r#"<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>"#));
+  workbook.push_str(&format!(r#"<sheet name="{name}" sheetId="{n}" r:id="rId{n}"/>"#));
+  relations.push_str(&format!(r#"<Relationship Id="rId{n}" Type="{REL}/worksheet" Target="worksheets/sheet{n}.xml"/>"#));
+ }
+ types.push_str("</Types>");workbook.push_str("</sheets></workbook>");
+ relations.push_str(&format!(r#"<Relationship Id="rId12" Type="{REL}/styles" Target="styles.xml"/></Relationships>"#));
+ xlsx_part(&mut zip,"[Content_Types].xml",&types)?;
+ xlsx_part(&mut zip,"_rels/.rels",&format!(r#"{DECL}<Relationships xmlns="{PKG_REL}"><Relationship Id="rId1" Type="{REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>"#))?;
+ xlsx_part(&mut zip,"xl/workbook.xml",&workbook)?;
+ xlsx_part(&mut zip,"xl/_rels/workbook.xml.rels",&relations)?;
+ let styles=format!(r#"{DECL}<styleSheet xmlns="{NS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF203A60"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#);
+ xlsx_part(&mut zip,"xl/styles.xml",&styles)?;
+ for (idx,rows) in sheets.iter().enumerate(){
+  let n=idx+1;
+  let data_sheet=(1..=3).contains(&idx);
+  let mut xml=format!(r#"{DECL}<worksheet xmlns="{NS}">"#);
+  if data_sheet{
+   xml.push_str(r#"<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>"#);
+  }
+  xml.push_str(r#"<sheetFormatPr defaultRowHeight="18"/><cols>"#);
+  let widths:Vec<u32>=match idx{0=>vec![28,100,52],1=>vec![10,24,24,24,38,16,14,28,28],2=>vec![10,38,22,22,28,16,14,66,54,36,54,54,28,24,28,16,16,42],3=>vec![10,38,22,28,40,20,28,24,28,20,22,20,40,16,40],_=>vec![100]};
+  for (col,width) in widths.iter().enumerate(){
+   let c=col+1;xml.push_str(&format!(r#"<col min="{c}" max="{c}" width="{width}" style="0" customWidth="1"/>"#));
+  }
+  xml.push_str("</cols><sheetData>");
+  for (r,cells) in rows.iter().enumerate(){
+   let row=r+1;
+   let header=(data_sheet&&row==4)||(idx==0&&row==3);
+   let height=if header{r#" ht="32" customHeight="1""#}else{""};
+   xml.push_str(&format!(r#"<row r="{row}"{height}>"#));
+   for (c,value) in cells.iter().enumerate(){
+    if value.is_empty(){continue}
+    // All template sheets have fewer than 26 columns.
+    let col=(b'A'+c as u8) as char;
+    let style=if header{1}else{0};
+    xml.push_str(&format!(r#"<c r="{col}{row}" s="{style}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,xml_text(value)));
+   }
+   xml.push_str("</row>");
+  }
+  xml.push_str("</sheetData></worksheet>");
+  xlsx_part(&mut zip,&format!("xl/worksheets/sheet{n}.xml"),&xml)?;
+ }
+ zip.finish().map(|c|c.into_inner()).map_err(|e|e.to_string())
+}
+pub fn download_template()->Result<Vec<u8>,String>{
+ build_template_workbook(&template_rows())
+}
+
 pub fn parse(data:&[u8])->Result<Preview,String>{
  if data.len()>16*1024*1024{return Err("文件超过16MB限制".into())}
  let mut zip=ZipArchive::new(Cursor::new(data)).map_err(|e|format!("不是有效xlsx：{e}"))?;
@@ -93,7 +190,7 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  let xml=read_file(&mut zip,"xl/workbook.xml")?;
  let w=roxmltree::Document::parse(&xml).map_err(|e|e.to_string())?;
  let names:Vec<String>=w.descendants().filter(|n|n.has_tag_name("sheet")).filter_map(|n|n.attribute("name").map(str::to_owned)).collect();
- let expected=["说明","严重告警清单","规则配置明细","告警参数配置","告警参数规范","采集侧标签配置","告警侧派生标签","host_ip 可派生性","通知路由配置","消息模板","待确认事项"];
+ let expected=TEMPLATE_SHEETS;
  if names.len()!=11||expected.iter().any(|s|!names.iter().any(|n|n==s)){return Err("工作簿的11个Sheet与模板不一致，已拒绝导入".into())}
  let mut sheets=HashMap::<String,Rows>::new();
  for (i,n) in names.iter().enumerate(){let rows=parse_rows(&read_file(&mut zip,&format!("xl/worksheets/sheet{}.xml",i+1))?,&ss)?;sheets.insert(n.clone(),rows);}
@@ -141,6 +238,33 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  Ok(Preview{preview_id:String::new(),sheets:names,selected:rules.len(),all_rules:all,rules,workbook_warnings:warnings})
 }
 #[cfg(test)]mod tests{use super::*;
+ #[test]fn downloadable_template_has_no_candidate_rules_and_accepts_filled_rows(){
+  let bytes=download_template().unwrap();
+  let preview=parse(&bytes).unwrap();
+  assert_eq!(preview.sheets,TEMPLATE_SHEETS.map(str::to_owned));
+  assert!(preview.rules.is_empty());
+  let mut zip=ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
+  for part in ["[Content_Types].xml","_rels/.rels","xl/_rels/workbook.xml.rels","xl/styles.xml"]{
+   let xml=read_file(&mut zip,part).unwrap();
+   roxmltree::Document::parse(&xml).unwrap();
+  }
+  let mut rows=template_rows();
+  rows[2].push(vec!["1","Example-TargetDown","node","host","","严重","S1","up == 0","","目标不可达","指标为零","检查采集"]);
+  rows[3].push(vec!["1","Example-TargetDown","","","","","1m","","","5 分钟","60 分钟","0（不限）"]);
+  let filled=build_template_workbook(&rows).unwrap();
+  let preview=parse(&filled).unwrap();
+  assert_eq!(preview.all_rules,1);
+  let rule=&preview.rules[0];
+  assert_eq!(rule.name,"Example-TargetDown");
+  assert_eq!(rule.promql,"up == 0");
+  assert_eq!(rule.duration_seconds,60);
+  assert_eq!(rule.recovery_seconds,300);
+  assert_eq!(rule.repeat_minutes,60);
+  assert_eq!(rule.max_repeat_count,0);
+  assert_eq!(rule.excel_level,"S1");
+  assert_eq!(rule.excel_severity,"严重");
+  assert!(rule.issues.is_empty());
+ }
  #[test]fn durations(){assert_eq!(seconds("1m"),Some(60));assert_eq!(seconds("2 分钟"),Some(120));assert_eq!(seconds(""),None);assert_eq!(seconds("0m"),Some(0));assert_eq!(repeat_count("0（不限）"),Some(0));assert_eq!(repeat_count("3"),Some(3));assert_eq!(repeat_count("无限"),None);}
  #[test]fn red(){assert!(is_red("FFFF0000"));assert!(!is_red("FFD6E4F0"));}
  #[test]fn summary_row_marker_does_not_exclude_genuine_rule_names(){
