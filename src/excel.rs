@@ -53,13 +53,17 @@ fn parse_rows(xml:&str,strings:&[String])->Result<Rows,String>{
  }Ok(out)
 }
 fn get<'a>(r:&'a HashMap<String,String>,column:&str)->&'a str{r.get(column).map(|s|s.as_str()).unwrap_or("")}
-fn index_by_name(rows:&Rows,col:&str)->HashMap<String,HashMap<String,String>>{rows.iter().filter(|r|r.get("#row").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0)>=5).filter(|r|!get(r,col).is_empty()).map(|r|(get(r,col).trim().to_string(),r.clone())).collect()}
+fn index_by_name(rows:&Rows,col:&str)->HashMap<String,HashMap<String,String>>{rows.iter().filter(|r|r.get("#row").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0)>=5).filter(|r|!get(r,col).is_empty()&&!is_summary_row(r)&&!is_template_example(r)).map(|r|(get(r,col).trim().to_string(),r.clone())).collect()}
 // Locate the two Excel metadata columns by their header text, not assumed column positions.
 // Templates may put them on different sheets or columns; never confuse them with the
 // hardcoded Nightingale severity used when creating an alert.
 // Summary rows are not alert rules even when column B contains a count.
 // Match the dedicated marker in column A only, so a real rule name
 // containing "合计" in column B is not silently dropped.
+const TEMPLATE_EXAMPLE_MARKER:&str="示例（不导入）";
+fn is_template_example(row:&HashMap<String,String>)->bool{
+ get(row,"A").trim()==TEMPLATE_EXAMPLE_MARKER
+}
 fn is_summary_row(row:&HashMap<String,String>)->bool{
  get(row,"A").trim()=="合计"
 }
@@ -90,13 +94,14 @@ fn issue(level:&str,message:impl Into<String>)->Issue{Issue{level:level.into(),m
 const TEMPLATE_SHEETS:[&str;11]=["说明","严重告警清单","规则配置明细","告警参数配置","告警参数规范","采集侧标签配置","告警侧派生标签","host_ip 可派生性","通知路由配置","消息模板","待确认事项"];
 
 // The downloadable workbook is generated from the parser's schema, not from
-// private production data. No candidate rules are pre-populated.
+// private production data. A clearly marked example is excluded by the parser.
 fn template_rows()->Vec<Vec<Vec<&'static str>>>{
  let mut sheets=vec![
   vec![
    vec!["Nightingale v8 告警规则导入模板"],
-   vec!["填写说明：保留全部 11 个工作表及列顺序；从第 5 行开始录入规则。"],
+   vec!["填写说明：保留全部 11 个工作表及列顺序；第 5 行为示例，请从第 6 行开始录入正式规则。"],
    vec!["步骤","填写要求","示例（仅供参考，不会导入）"],
+   vec!["0. 完整案例","三个业务工作表第 5 行为同一条案例，A 列标记为「示例（不导入）」，解析时自动跳过。正式规则请从第 6 行填写，或复制案例并将 A 列改为数字序号，同时替换规则名称和配置。","Example-TargetDown：监控采集目标不可达"],
    vec!["1. 规则配置明细","B 列告警名称、H 列原始 PromQL 必填；J/K/L 列可填写摘要、描述、处理建议。","Example-TargetDown；up == 0"],
    vec!["2. 告警参数配置","B 列名称必须与规则配置明细完全一致；G/J/K/L 列必填。","Example-TargetDown；1m；300s；60 分钟；0（不限）"],
    vec!["3. 严重告警清单","可选：按 E 列规则名称关联 B 列 Exporter、I 列持续时间（G 列原始时长为空时备用）。","Example-TargetDown；node-exporter；1m"],
@@ -108,9 +113,13 @@ fn template_rows()->Vec<Vec<Vec<&'static str>>>{
    vec!["9. 辅助工作表","其余工作表仅保留兼容结构，可留空；无需人工构造生产数据。"],
   ],
   vec![vec!["严重告警清单"],vec!["可选参考清单；E 列名称应与规则配置明细 B 列一致。"],vec![],vec!["序号","Exporter","告警分组","监控对象","告警名称（夜莺 Rule）","严重程度","级别","原始告警名","持续时长 for（清单现值）"]],
-  vec![vec!["规则配置明细"],vec!["B/H 必填；F/G 仅用于筛选。请从第 5 行填写，不要修改列顺序。"],vec![],vec!["序号","告警名称（夜莺 Rule）","告警分组","监控对象","原始告警名","严重程度","级别","原始 PromQL","建议查询（仅参考）","告警摘要","告警描述","处理建议","通知接收组（仅参考）","通知渠道（仅参考）","通知路由（仅参考）","预留","预留","备注"]],
-  vec![vec!["告警参数配置"],vec!["B/G/J/K/L 必填；B 列必须与规则配置明细完全一致。请从第 5 行填写。"],vec![],vec!["序号","告警名称（夜莺 Rule）","告警分组","原始告警名","告警阈值","故障性质","持续时长 for（清单现值）","建议持续时长","持续时长差异","留观时长","重复通知间隔","最大重复次数","采集侧必备标签（仅参考）","预留","告警侧扩展标签（仅参考）"]],
+  vec![vec!["规则配置明细"],vec!["B/H 必填；F/G 仅用于筛选。第 5 行为示例；正式规则从第 6 行填写，不要修改列顺序。"],vec![],vec!["序号","告警名称（夜莺 Rule）","告警分组","监控对象","原始告警名","严重程度","级别","原始 PromQL","建议查询（仅参考）","告警摘要","告警描述","处理建议","通知接收组（仅参考）","通知渠道（仅参考）","通知路由（仅参考）","预留","预留","备注"]],
+  vec![vec!["告警参数配置"],vec!["B/G/J/K/L 必填；B 列必须与规则配置明细完全一致。第 5 行为示例；正式规则从第 6 行填写。"],vec![],vec!["序号","告警名称（夜莺 Rule）","告警分组","原始告警名","告警阈值","故障性质","持续时长 for（清单现值）","建议持续时长","持续时长差异","留观时长","重复通知间隔","最大重复次数","采集侧必备标签（仅参考）","预留","告警侧扩展标签（仅参考）"]],
  ];
+ // The same sample is present in all three related sheets.
+ sheets[1].push(vec![TEMPLATE_EXAMPLE_MARKER,"node-exporter","主机监控","主机","Example-TargetDown","严重","S1","TargetDown","1m"]);
+ sheets[2].push(vec![TEMPLATE_EXAMPLE_MARKER,"Example-TargetDown","主机监控","主机","TargetDown","严重","S1",r#"up{job="node-exporter"} == 0"#,"","采集目标不可达","node-exporter 采集目标连续 1 分钟不可达，请检查目标与采集链路。","检查目标状态、网络连通性及 exporter 服务。","按实际情况配置","","","","","示例规则，不导入"]);
+ sheets[3].push(vec![TEMPLATE_EXAMPLE_MARKER,"Example-TargetDown","主机监控","TargetDown","up == 0","目标不可达","1m","","","5 分钟","60 分钟","0（不限）","instance、job","",""]);
  for &name in &TEMPLATE_SHEETS[4..]{
   sheets.push(vec![vec![name],vec!["辅助工作表（兼容保留，当前工具不导入本表内容，可留空）"]]);
  }
@@ -204,7 +213,7 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  let mut rules=Vec::new();let mut all=0;
  for r in details{
   let rn=get(r,"#row").parse::<u32>().unwrap_or(0);
-  if rn<5||get(r,"B").trim().is_empty()||is_summary_row(r){continue}all+=1;
+  if rn<5||get(r,"B").trim().is_empty()||is_summary_row(r)||is_template_example(r){continue}all+=1;
   let name=get(r,"B").trim().to_string();let p=params.get(&name);let o=overview.get(&name);
   let v=|m:Option<&HashMap<String,String>>,key:&str|m.map(|r|get(r,key).to_string()).unwrap_or_default();
   let orig=v(p,"G");let overview_d=v(o,"I");let duration=if orig.is_empty(){overview_d.clone()}else{orig.clone()};
@@ -238,7 +247,7 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
  Ok(Preview{preview_id:String::new(),sheets:names,selected:rules.len(),all_rules:all,rules,workbook_warnings:warnings})
 }
 #[cfg(test)]mod tests{use super::*;
- #[test]fn downloadable_template_has_no_candidate_rules_and_accepts_filled_rows(){
+ #[test]fn downloadable_template_skips_example_and_accepts_filled_rows(){
   let bytes=download_template().unwrap();
   let preview=parse(&bytes).unwrap();
   assert_eq!(preview.sheets,TEMPLATE_SHEETS.map(str::to_owned));
@@ -249,6 +258,12 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
    roxmltree::Document::parse(&xml).unwrap();
   }
   let mut rows=template_rows();
+  assert_eq!(rows[1][4][0],TEMPLATE_EXAMPLE_MARKER);
+  assert_eq!(rows[2][4][1],"Example-TargetDown");
+  assert_eq!(rows[3][4][1],"Example-TargetDown");
+  // Copy the example into a real rule with the same name to verify that
+  // marked example rows are excluded from both rule parsing and name indexes.
+  rows[1].push(vec!["1","test-exporter","node","host","Example-TargetDown","严重","S1","","1m"]);
   rows[2].push(vec!["1","Example-TargetDown","node","host","","严重","S1","up == 0","","目标不可达","指标为零","检查采集"]);
   rows[3].push(vec!["1","Example-TargetDown","","","","","1m","","","5 分钟","60 分钟","0（不限）"]);
   let filled=build_template_workbook(&rows).unwrap();
@@ -256,6 +271,8 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
   assert_eq!(preview.all_rules,1);
   let rule=&preview.rules[0];
   assert_eq!(rule.name,"Example-TargetDown");
+  assert_eq!(rule.row,6);
+  assert_eq!(rule.exporter,"test-exporter");
   assert_eq!(rule.promql,"up == 0");
   assert_eq!(rule.duration_seconds,60);
   assert_eq!(rule.recovery_seconds,300);
@@ -264,6 +281,13 @@ pub fn parse(data:&[u8])->Result<Preview,String>{
   assert_eq!(rule.excel_level,"S1");
   assert_eq!(rule.excel_severity,"严重");
   assert!(rule.issues.is_empty());
+  // Removing the marker on all three sample rows makes the example a usable rule.
+  let mut rows=template_rows();
+  for idx in 1..=3{rows[idx][4][0]="1";}
+  let preview=parse(&build_template_workbook(&rows).unwrap()).unwrap();
+  assert_eq!(preview.all_rules,1);
+  assert!(preview.rules[0].issues.is_empty());
+  assert_eq!(preview.rules[0].promql,r#"up{job="node-exporter"} == 0"#);
  }
  #[test]fn durations(){assert_eq!(seconds("1m"),Some(60));assert_eq!(seconds("2 分钟"),Some(120));assert_eq!(seconds(""),None);assert_eq!(seconds("0m"),Some(0));assert_eq!(repeat_count("0（不限）"),Some(0));assert_eq!(repeat_count("3"),Some(3));assert_eq!(repeat_count("无限"),None);}
  #[test]fn red(){assert!(is_red("FFFF0000"));assert!(!is_red("FFD6E4F0"));}
