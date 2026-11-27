@@ -102,7 +102,7 @@ fn template_rows()->Vec<Vec<Vec<&'static str>>>{
    vec!["填写说明：保留全部 11 个工作表及列顺序；第 5 行为示例，请从第 6 行开始录入正式规则。"],
    vec!["步骤","填写要求","示例（仅供参考，不会导入）"],
    vec!["0. 完整案例","三个业务工作表第 5 行为同一条案例，A 列标记为「示例（不导入）」，解析时自动跳过。正式规则请从第 6 行填写，或复制案例并将 A 列改为数字序号，同时替换规则名称和配置。","Example-TargetDown：监控采集目标不可达"],
-   vec!["1. 规则配置明细","B 列告警名称、H 列原始 PromQL 必填；J/K/L 列可填写摘要、描述、处理建议。","Example-TargetDown；up == 0"],
+   vec!["1. 规则配置明细","B 列告警名称、H 列原始 PromQL 必填；J/K/L 列可填写摘要、描述、处理建议。","Example-TargetDown；up{job=\"node-exporter\"} == 0"],
    vec!["2. 告警参数配置","B 列名称必须与规则配置明细完全一致；G/J/K/L 列必填。","Example-TargetDown；1m；300s；60 分钟；0（不限）"],
    vec!["3. 严重告警清单","可选：按 E 列规则名称关联 B 列 Exporter、I 列持续时间（G 列原始时长为空时备用）。","Example-TargetDown；node-exporter；1m"],
    vec!["4. 级别与严重程度","规则配置明细 F/G 列用于筛选；不影响新建规则固定 S1 的设置。","严重；S1"],
@@ -154,7 +154,7 @@ fn build_template_workbook(sheets:&[Vec<Vec<&str>>])->Result<Vec<u8>,String>{
  xlsx_part(&mut zip,"_rels/.rels",&format!(r#"{DECL}<Relationships xmlns="{PKG_REL}"><Relationship Id="rId1" Type="{REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>"#))?;
  xlsx_part(&mut zip,"xl/workbook.xml",&workbook)?;
  xlsx_part(&mut zip,"xl/_rels/workbook.xml.rels",&relations)?;
- let styles=format!(r#"{DECL}<styleSheet xmlns="{NS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF203A60"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#);
+ let styles=format!(r#"{DECL}<styleSheet xmlns="{NS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF203A60"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF3D6"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="49" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#);
  xlsx_part(&mut zip,"xl/styles.xml",&styles)?;
  for (idx,rows) in sheets.iter().enumerate(){
   let n=idx+1;
@@ -164,7 +164,7 @@ fn build_template_workbook(sheets:&[Vec<Vec<&str>>])->Result<Vec<u8>,String>{
    xml.push_str(r#"<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>"#);
   }
   xml.push_str(r#"<sheetFormatPr defaultRowHeight="18"/><cols>"#);
-  let widths:Vec<u32>=match idx{0=>vec![28,100,52],1=>vec![10,24,24,24,38,16,14,28,28],2=>vec![10,38,22,22,28,16,14,66,54,36,54,54,28,24,28,16,16,42],3=>vec![10,38,22,28,40,20,28,24,28,20,22,20,40,16,40],_=>vec![100]};
+  let widths:Vec<u32>=match idx{0=>vec![28,100,52],1=>vec![22,24,24,24,38,16,14,28,28],2=>vec![22,38,22,22,28,16,14,66,54,36,54,54,28,24,28,16,16,42],3=>vec![22,38,22,28,40,20,28,24,28,20,22,20,40,16,40],_=>vec![100]};
   for (col,width) in widths.iter().enumerate(){
    let c=col+1;xml.push_str(&format!(r#"<col min="{c}" max="{c}" width="{width}" style="0" customWidth="1"/>"#));
   }
@@ -172,13 +172,14 @@ fn build_template_workbook(sheets:&[Vec<Vec<&str>>])->Result<Vec<u8>,String>{
   for (r,cells) in rows.iter().enumerate(){
    let row=r+1;
    let header=(data_sheet&&row==4)||(idx==0&&row==3);
-   let height=if header{r#" ht="32" customHeight="1""#}else if idx==0&&row>=4{r#" ht="36" customHeight="1""#}else{""};
+   let sample=data_sheet&&cells.first()==Some(&TEMPLATE_EXAMPLE_MARKER);
+   let height=if sample{r#" ht="48" customHeight="1""#}else if header{r#" ht="32" customHeight="1""#}else if idx==0&&row>=4{r#" ht="36" customHeight="1""#}else{""};
    xml.push_str(&format!(r#"<row r="{row}"{height}>"#));
    for (c,value) in cells.iter().enumerate(){
     if value.is_empty(){continue}
     // All template sheets have fewer than 26 columns.
     let col=(b'A'+c as u8) as char;
-    let style=if header{1}else if idx==0&&row>=4{2}else{0};
+    let style=if sample{3}else if header{1}else if idx==0&&row>=4{2}else{0};
     xml.push_str(&format!(r#"<c r="{col}{row}" s="{style}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,xml_text(value)));
    }
    xml.push_str("</row>");
