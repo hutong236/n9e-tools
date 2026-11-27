@@ -99,6 +99,18 @@ async fn discover(Json(req):Json<DiscoverRequest>)->Result<Json<DiscoverResult>,
 #[derive(Serialize)]struct ImportResult{created:usize,skipped:usize,failed:usize,items:Vec<ResultRow>}
 fn error(code:StatusCode,msg:impl Into<String>)->(StatusCode,Json<Value>){(code,Json(serde_json::json!({"error":msg.into()})))}
 async fn index()->Html<&'static str>{Html(include_str!("../static/index.html"))}
+async fn template_download()->Result<Response,(StatusCode,Json<Value>)>{
+ let bytes=tokio::task::spawn_blocking(excel::download_template).await
+  .map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))?
+  .map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,format!("模板生成失败：{e}")))?;
+ Response::builder().status(StatusCode::OK)
+  .header(header::CONTENT_TYPE,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+  .header(header::CONTENT_DISPOSITION,"attachment; filename=\"n9e-alert-rules-template.xlsx\"")
+  .header(header::CACHE_CONTROL,"no-store")
+  .body(Body::from(bytes))
+  .map_err(|e|error(StatusCode::INTERNAL_SERVER_ERROR,e.to_string()))
+}
+
 async fn preview(State(state):State<AppState>,mut multipart:Multipart)->Result<Json<Preview>,(StatusCode,Json<Value>)>{
  let mut file=None;
  while let Some(field)=multipart.next_field().await.map_err(|e|error(StatusCode::BAD_REQUEST,e.to_string()))?{
@@ -447,7 +459,7 @@ async fn import_stream(State(state):State<AppState>,Json(req):Json<ImportRequest
  let state:AppState=Arc::new(Mutex::new(HashMap::new()));
  let overwrite_state:OverwriteState=Arc::new(Mutex::new(HashMap::new()));
  let overwrite_write_lock:OverwriteWriteLock=Arc::new(tokio::sync::Mutex::new(()));
- let app=Router::new().route("/",get(index)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).route("/api/import-stream",post(import_stream)).route("/api/overwrite/prepare",post(overwrite_prepare)).route("/api/overwrite/execute",post(overwrite_execute)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state).layer(Extension(overwrite_state)).layer(Extension(overwrite_write_lock));
+ let app=Router::new().route("/",get(index)).route("/api/template",get(template_download)).route("/api/preview",post(preview)).route("/api/test-connection",post(test_connection)).route("/api/discover",post(discover)).route("/api/import",post(import)).route("/api/import-stream",post(import_stream)).route("/api/overwrite/prepare",post(overwrite_prepare)).route("/api/overwrite/execute",post(overwrite_execute)).layer(DefaultBodyLimit::max(16*1024*1024)).with_state(state).layer(Extension(overwrite_state)).layer(Extension(overwrite_write_lock));
  let bind=std::env::var("BIND").unwrap_or("127.0.0.1:8088".into());
  let addr:SocketAddr=bind.parse().expect("BIND must be IP:port");
  let listener=tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -458,6 +470,17 @@ async fn import_stream(State(state):State<AppState>,Json(req):Json<ImportRequest
 #[cfg(test)]
 mod tests {
  use super::*;
+ #[tokio::test]
+ async fn template_download_returns_valid_xlsx_attachment(){
+  let response=template_download().await.unwrap();
+  assert_eq!(response.status(),StatusCode::OK);
+  assert_eq!(response.headers()[header::CONTENT_TYPE],"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  assert_eq!(response.headers()[header::CONTENT_DISPOSITION],"attachment; filename=\"n9e-alert-rules-template.xlsx\"");
+  let bytes=axum::body::to_bytes(response.into_body(),1024*1024).await.unwrap();
+  let preview=excel::parse(&bytes).unwrap();
+  assert_eq!(preview.sheets.len(),11);
+  assert!(preview.rules.is_empty());
+ }
  #[test]
  fn nightingale_v8_notify_import_route_is_explicit(){
   let list_uri="https://n9e.example/api/n9e/busi-group/5/alert-rules";
