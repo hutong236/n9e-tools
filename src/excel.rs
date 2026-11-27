@@ -131,7 +131,7 @@ fn build_template_workbook(sheets:&[Vec<Vec<&str>>])->Result<Vec<u8>,String>{
  const PKG_REL:&str="http://schemas.openxmlformats.org/package/2006/relationships";
  let mut zip=zip::ZipWriter::new(Cursor::new(Vec::new()));
  let mut types=format!(r#"{DECL}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>"#);
- let mut workbook=format!(r#"{DECL}<workbook xmlns="{NS}" xmlns:r="{REL}"><sheets>"#);
+ let mut workbook=format!(r#"{DECL}<workbook xmlns="{NS}" xmlns:r="{REL}"><bookViews><workbookView activeTab="0"/></bookViews><sheets>"#);
  let mut relations=format!(r#"{DECL}<Relationships xmlns="{PKG_REL}">"#);
  for (i,name) in TEMPLATE_SHEETS.iter().enumerate(){
   let n=i+1;
@@ -145,7 +145,7 @@ fn build_template_workbook(sheets:&[Vec<Vec<&str>>])->Result<Vec<u8>,String>{
  xlsx_part(&mut zip,"_rels/.rels",&format!(r#"{DECL}<Relationships xmlns="{PKG_REL}"><Relationship Id="rId1" Type="{REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>"#))?;
  xlsx_part(&mut zip,"xl/workbook.xml",&workbook)?;
  xlsx_part(&mut zip,"xl/_rels/workbook.xml.rels",&relations)?;
- let styles=format!(r#"{DECL}<styleSheet xmlns="{NS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF203A60"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#);
+ let styles=format!(r#"{DECL}<styleSheet xmlns="{NS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF203A60"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#);
  xlsx_part(&mut zip,"xl/styles.xml",&styles)?;
  for (idx,rows) in sheets.iter().enumerate(){
   let n=idx+1;
@@ -163,13 +163,13 @@ fn build_template_workbook(sheets:&[Vec<Vec<&str>>])->Result<Vec<u8>,String>{
   for (r,cells) in rows.iter().enumerate(){
    let row=r+1;
    let header=(data_sheet&&row==4)||(idx==0&&row==3);
-   let height=if header{r#" ht="32" customHeight="1""#}else{""};
+   let height=if header{r#" ht="32" customHeight="1""#}else if idx==0&&row>=4{r#" ht="36" customHeight="1""#}else{""};
    xml.push_str(&format!(r#"<row r="{row}"{height}>"#));
    for (c,value) in cells.iter().enumerate(){
     if value.is_empty(){continue}
     // All template sheets have fewer than 26 columns.
     let col=(b'A'+c as u8) as char;
-    let style=if header{1}else{0};
+    let style=if header{1}else if idx==0&&row>=4{2}else{0};
     xml.push_str(&format!(r#"<c r="{col}{row}" s="{style}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,xml_text(value)));
    }
    xml.push_str("</row>");
